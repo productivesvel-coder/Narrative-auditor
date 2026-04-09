@@ -67,8 +67,6 @@ def extract_json_safely(text):
 
 def generate_graph_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
-    
-    # Strictly bound to the requested model
     model = genai.GenerativeModel('gemini-2.5-flash-lite')
     
     context = "\n".join([f"[{r['title']}] - {r['content']}" for r in news_results])
@@ -83,7 +81,7 @@ def generate_graph_data(news_results):
     3. Link sources to claims using 'REPORTS'.
     4. Link claims to each other using 'CONTRADICTS' or 'SUPPORTS'.
     
-    CRITICAL: For every node, provide a concise 'name' (for the visible title) and a detailed 'description' (explaining the context of the claim or the nature of the source).
+    CRITICAL: For every node, provide a concise 'name' (visible title) and a detailed 'description' (contextual summary).
     
     OUTPUT FORMAT: RAW JSON ONLY.
     {{
@@ -101,8 +99,6 @@ def generate_graph_data(news_results):
     )
     
     raw_data = extract_json_safely(response.text)
-    
-    # Sanitizer to prevent Ghost Nodes crashing the 3D WebGL render
     node_ids = {node['id'] for node in raw_data.get('nodes', [])}
     if 'links' in raw_data:
         raw_data['links'] = [
@@ -120,18 +116,18 @@ def render_3d_graph(data):
     html_code = f"""
     <div id="graph-container" style="position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
         
-        <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 300px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 10; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
-            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
-                <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px; font-family: sans-serif;"></h3>
-                <button onclick="document.getElementById('info-panel').style.display='none'" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px;">✖</button>
+        <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 320px; background: rgba(15, 23, 42, 0.9); backdrop-filter: blur(12px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 100; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 12px;">
+                <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px; font-family: 'Inter', sans-serif;"></h3>
+                <button onclick="document.getElementById('info-panel').style.display='none'" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 18px;">✖</button>
             </div>
-            <p id="info-desc" style="font-size: 14px; line-height: 1.5; color: #e2e8f0; font-family: sans-serif; margin-bottom: 15px;"></p>
-            <div style="font-size: 11px; color: #94a3b8; font-family: sans-serif; text-transform: uppercase; letter-spacing: 1px;">
+            <p id="info-desc" style="font-size: 14px; line-height: 1.6; color: #e2e8f0; font-family: 'Inter', sans-serif; margin-bottom: 15px;"></p>
+            <div style="font-size: 11px; color: #94a3b8; font-family: 'Inter', sans-serif; text-transform: uppercase; letter-spacing: 1px; border-top: 1px solid #334155; padding-top: 10px;">
                 Classification: <strong id="info-group" style="color: #cbd5e1;"></strong>
             </div>
         </div>
 
-        <div id="graph" style="width: 100%; height: 65vh; background: #0B0F19;"></div>
+        <div id="graph" style="width: 100%; height: 70vh; background: #0B0F19;"></div>
     </div>
     
     <script src="//unpkg.com/three"></script>
@@ -145,45 +141,39 @@ def render_3d_graph(data):
       const Graph = ForceGraph3D()(elem)
           .graphData(gData)
           .nodeAutoColorBy('group')
-          .nodeRelSize(7)
+          .nodeRelSize(8)
           
-          // 1. Visible Titles permanently floating above nodes
           .nodeThreeObjectExtend(true)
           .nodeThreeObject(node => {{
               const sprite = new SpriteText(node.name || node.id);
-              sprite.color = '#cbd5e1';
-              sprite.textHeight = 4;
-              sprite.center = new THREE.Vector2(0.5, -1.2); // Position above the sphere
+              sprite.color = '#f8fafc';
+              sprite.textHeight = 4.5;
+              sprite.center = new THREE.Vector2(0.5, -1.5);
               return sprite;
           }})
           
-          // 2. Click interaction to view detailed context & Zoom
           .onNodeClick(node => {{
-              // Populate and show the UI panel
               document.getElementById('info-panel').style.display = 'block';
               document.getElementById('info-title').innerText = node.name || node.id;
-              document.getElementById('info-desc').innerText = node.description || 'No detailed context extracted for this node.';
+              document.getElementById('info-desc').innerText = node.description || 'No additional data compiled for this entity.';
               document.getElementById('info-group').innerText = node.group === 1 ? 'NEWS SOURCE' : 'EXTRACTED CLAIM';
               
-              // Camera zoom physics
-              const distance = 80;
+              const distance = 100;
               const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
               Graph.cameraPosition(
                   {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
                   node, 
-                  2000 // ms transition
+                  1500
               );
           }})
           
-          // 3. High Contrast Connections & Physics
-          .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 6 : 3)
-          .linkDirectionalParticleSpeed(link => link.value === 'CONTRADICTS' ? 0.015 : 0.008)
-          .linkWidth(link => link.value === 'CONTRADICTS' ? 4 : (link.value === 'SUPPORTS' ? 2 : 1))
-          .linkLabel('value')
+          .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 8 : 3)
+          .linkDirectionalParticleSpeed(link => link.value === 'CONTRADICTS' ? 0.02 : 0.008)
+          .linkWidth(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
           .linkColor(link => {{
-              if (link.value === 'CONTRADICTS') return '#ff3333'; // Vibrant Red
-              if (link.value === 'SUPPORTS') return '#00ff66';    // Vibrant Green
-              return '#aaaaaa';                                   // Clean Grey for Reports
+              if (link.value === 'CONTRADICTS') return '#ff3333';
+              if (link.value === 'SUPPORTS') return '#00ff66';
+              return '#64748b';
           }})
           .backgroundColor('#0B0F19');
           
@@ -193,55 +183,62 @@ def render_3d_graph(data):
     </script>
     <style> body {{ margin: 0; background: transparent; overflow: hidden; }} </style>
     """
-    components.html(html_code, height=600)
+    components.html(html_code, height=650)
 
 # --- 5. USER INTERFACE ---
 col1, col2 = st.columns([3, 1])
 
 with col1:
     st.title("Disonance Engine")
-    st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Real-time spatial mapping of global narrative consensus and contradiction.</p>", unsafe_allow_html=True)
+    st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Audit global narrative topology and logic contradictions in real-time.</p>", unsafe_allow_html=True)
 
-query = st.text_input("Target Subject / Event", placeholder="Enter geopolitical event, market shift, or global narrative to audit...")
+query = st.text_input("Target Subject / Event", placeholder="Enter geopolitical event or global narrative to audit...")
 
 if st.button("Initialize Logic Audit"):
     if not query.strip():
-        st.warning("Please define a target subject to begin the audit.")
+        st.warning("Target subject required.")
     else:
-        with st.status("Deploying Disonance Engine...", expanded=True) as status:
-            try:
-                st.write("📡 Accessing global news APIs...")
-                news = fetch_news(query)
-                
-                # Model name hidden from UI as requested
-                st.write("🧠 AI Engine compiling logical topology...")
-                graph_data = generate_graph_data(news)
-                
-                status.update(label="Audit Complete", state="complete", expanded=False)
-                
-                st.markdown("### Topology Map")
-                st.caption("🖱️ **Interact:** Rotate to explore. **Click any node** to view its extracted context.")
-                render_3d_graph(graph_data)
-                
-                st.markdown("### Verified Data Ledger")
-                for i, item in enumerate(news):
-                    with st.expander(f"Source {i+1}: {item['title']}"):
-                        st.caption(f"**URL:** {item['url']}")
-                        st.write(item['content'])
-                        
-            except Exception as e:
-                status.update(label="Audit Failed", state="error", expanded=False)
-                st.error(f"SYSTEM HALT: {str(e)}")
+        # Define placeholders so the results appear immediately after analysis
+        status_container = st.empty()
+        results_container = st.container()
+        
+        with status_container:
+            with st.status("Deploying Disonance Engine...", expanded=True) as status:
+                try:
+                    st.write("📡 Scanning global intelligence sources...")
+                    news = fetch_news(query)
+                    
+                    st.write("🧠 AI Engine mapping logical dissonance...")
+                    graph_data = generate_graph_data(news)
+                    
+                    status.update(label="Audit Finalized", state="complete", expanded=False)
+                except Exception as e:
+                    status.update(label="Audit Failure", state="error")
+                    st.error(f"Critical System Error: {str(e)}")
+                    st.stop()
+        
+        # Results inject directly below the collapsed status
+        with results_container:
+            st.markdown("### Topology Map")
+            st.info("🖱️ **Interaction Logic:** Click spheres to expand context. Contradictions (Red) indicate narrative dissonance.")
+            render_3d_graph(graph_data)
+            
+            st.markdown("---")
+            st.markdown("### Verified Data Ledger")
+            for i, item in enumerate(news):
+                with st.expander(f"INTEL SOURCE {i+1}: {item['title']}"):
+                    st.caption(f"**Origin:** {item['url']}")
+                    st.write(item['content'])
 
 # --- 6. SIDEBAR METRICS ---
 with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Linked")
-    st.write("🟢 **Render Engine:** 3D Force-Directed")
+    st.write("🟢 **AI Engine:** Operational")
+    st.write("🟢 **Render Engine:** WebGL 3D")
     st.markdown("---")
-    st.caption("Connection Legend:")
-    st.markdown("<span style='color: #ff3333;'>██</span> Contradicts (High Conflict)", unsafe_allow_html=True)
-    st.markdown("<span style='color: #00ff66;'>██</span> Supports (Consensus)", unsafe_allow_html=True)
-    st.markdown("<span style='color: #aaaaaa;'>██</span> Reports (Origin)", unsafe_allow_html=True)
+    st.caption("Dissonance Metrics:")
+    st.markdown("<span style='color: #ff3333; font-weight: bold;'>█</span> CONTRADICTION (Conflict)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #00ff66; font-weight: bold;'>█</span> SUPPORT (Consensus)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #64748b; font-weight: bold;'>█</span> REPORT (Neutral Link)", unsafe_allow_html=True)
