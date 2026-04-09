@@ -46,7 +46,7 @@ st.markdown("""
 
 # --- 2. SECURE CREDENTIALS ---
 TAVILY_API_KEY = "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"
-AI_ENGINE_KEY = "AIzaSyAbwTIkuJU4CkZdVpwCNmr3R4hfzml5AKs"
+AI_ENGINE_KEY = "AIzaSyAyTNUZ7ZkaRNGdL-QD5om4_iGzbdEMmp4"
 
 # --- 3. CORE LOGIC ENGINE ---
 def fetch_news(query):
