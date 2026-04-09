@@ -16,11 +16,11 @@ def fetch_news(query):
 
 def generate_graph_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
-    model = genai.GenerativeModel('gemini-1.5-flash')
+    # Targetting the specific 2.5 Flash stable model
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
     context = "\n".join([f"Source: {r['title']} - Content: {r['content']}" for r in news_results])
     
-    # Using double curly braces {{ }} to prevent Python string formatting errors
     prompt = f"""
     Analyze this context: {context}
     
@@ -28,7 +28,7 @@ def generate_graph_data(news_results):
     1. Nodes: 5 'Claim' (group 2) and 'Source' names (group 1).
     2. Links: 'SUPPORTS' or 'CONTRADICTS'.
     
-    Output ONLY raw JSON. No markdown, no commentary.
+    Output ONLY raw JSON. No markdown.
     {{
       "nodes": [{{ "id": "Name", "group": 1 }}],
       "links": [{{ "source": "ID1", "target": "ID2", "value": "label" }}]
@@ -37,7 +37,7 @@ def generate_graph_data(news_results):
     
     response = model.generate_content(
         prompt, 
-        generation_config={"response_mime_type": "application/json"}
+        generation_config={{"response_mime_type": "application/json"}}
     )
     
     return json.loads(response.text)
@@ -64,31 +64,31 @@ def render_3d_graph(data):
     components.html(html_code, height=600)
 
 st.title("🌐 Disonance Engine: 3D Narrative Auditor")
-st.markdown("Mapping logical integrity in global information streams.")
+st.markdown("Auditing narratives with Gemini 2.5 Flash architecture.")
 
-query = st.text_input("Query for Disonance Audit:", placeholder="e.g. South China Sea tensions")
+query = st.text_input("Enter a query for the Disonance Engine:", placeholder="e.g. AI ethics debate")
 
 if st.button("Initialize Engine"):
     if not query:
         st.error("Please enter a query.")
     else:
-        with st.spinner("Disonance Engine is analyzing narratives..."):
+        with st.spinner("Analyzing data with 2.5 Flash..."):
             try:
                 news = fetch_news(query)
                 graph_data = generate_graph_data(news)
                 
-                st.subheader(f"Logical Audit Map: {query}")
+                st.subheader(f"3D Logical Audit: {query}")
                 render_3d_graph(graph_data)
                 
-                with st.expander("Data Integrity Report"):
+                with st.expander("Data Sources"):
                     for item in news:
                         st.write(f"📂 **{item['title']}**")
                         st.caption(item['url'])
                         st.divider()
                         
             except Exception as e:
-                st.error(f"Engine Diagnostic: {str(e)}")
+                st.error(f"Disonance Engine Error: {str(e)}")
 
 st.sidebar.title("Engine Metrics")
 st.sidebar.metric("Status", "Operational")
-st.sidebar.metric("Verification Mode", "Strict")
+st.sidebar.write("Core: **Gemini 2.5 Flash**")
