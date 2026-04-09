@@ -8,7 +8,6 @@ import streamlit.components.v1 as components
 # --- 1. PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(layout="wide", page_title="Disonance Engine | Audit", initial_sidebar_state="expanded")
 
-# Injecting professional SaaS-like CSS
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -47,7 +46,6 @@ st.markdown("""
 
 # --- 2. SECURE CREDENTIALS ---
 TAVILY_API_KEY = "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"
-# Updated with your new key
 AI_ENGINE_KEY = "AIzaSyAJioZHv3AXVij5P5b3rHBEVlCDet3chGo"
 
 # --- 3. CORE LOGIC ENGINE ---
@@ -59,11 +57,9 @@ def fetch_news(query):
     return response['results']
 
 def extract_json_safely(text):
-    """Parses JSON even if the AI wraps it in markdown blocks."""
     try:
         return json.loads(text)
     except json.JSONDecodeError:
-        # Fallback: Use regex to extract the first valid JSON object found
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
             return json.loads(match.group(0))
@@ -72,7 +68,7 @@ def extract_json_safely(text):
 def generate_graph_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
     
-    # Updated to Gemini 2.5 Flash Lite
+    # Strictly bound to the requested model
     model = genai.GenerativeModel('gemini-2.5-flash-lite')
     
     context = "\n".join([f"[{r['title']}] - {r['content']}" for r in news_results])
@@ -87,9 +83,11 @@ def generate_graph_data(news_results):
     3. Link sources to claims using 'REPORTS'.
     4. Link claims to each other using 'CONTRADICTS' or 'SUPPORTS'.
     
+    CRITICAL: For every node, provide a concise 'name' (for the visible title) and a detailed 'description' (explaining the context of the claim or the nature of the source).
+    
     OUTPUT FORMAT: RAW JSON ONLY.
     {{
-      "nodes": [{{ "id": "String", "group": 1 }}],
+      "nodes": [{{ "id": "String", "name": "String", "description": "String", "group": 1 }}],
       "links": [{{ "source": "String", "target": "String", "value": "String" }}]
     }}
     
@@ -104,7 +102,7 @@ def generate_graph_data(news_results):
     
     raw_data = extract_json_safely(response.text)
     
-    # --- Data Sanitizer: Prevent Ghost Nodes (Fixes common 3D render crashes) ---
+    # Sanitizer to prevent Ghost Nodes crashing the 3D WebGL render
     node_ids = {node['id'] for node in raw_data.get('nodes', [])}
     if 'links' in raw_data:
         raw_data['links'] = [
@@ -120,10 +118,26 @@ def generate_graph_data(news_results):
 def render_3d_graph(data):
     graph_json = json.dumps(data)
     html_code = f"""
-    <div id="graph-container" style="border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+    <div id="graph-container" style="position: relative; border-radius: 12px; overflow: hidden; box-shadow: 0 4px 20px rgba(0,0,0,0.5);">
+        
+        <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 300px; background: rgba(15, 23, 42, 0.85); backdrop-filter: blur(8px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 10; box-shadow: 0 10px 25px rgba(0,0,0,0.5);">
+            <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px;">
+                <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px; font-family: sans-serif;"></h3>
+                <button onclick="document.getElementById('info-panel').style.display='none'" style="background: none; border: none; color: #94a3b8; cursor: pointer; font-size: 16px;">✖</button>
+            </div>
+            <p id="info-desc" style="font-size: 14px; line-height: 1.5; color: #e2e8f0; font-family: sans-serif; margin-bottom: 15px;"></p>
+            <div style="font-size: 11px; color: #94a3b8; font-family: sans-serif; text-transform: uppercase; letter-spacing: 1px;">
+                Classification: <strong id="info-group" style="color: #cbd5e1;"></strong>
+            </div>
+        </div>
+
         <div id="graph" style="width: 100%; height: 65vh; background: #0B0F19;"></div>
     </div>
-    <script src="//cdn.jsdelivr.net/npm/3d-force-graph"></script>
+    
+    <script src="//unpkg.com/three"></script>
+    <script src="//unpkg.com/three-spritetext"></script>
+    <script src="//unpkg.com/3d-force-graph"></script>
+    
     <script>
       const gData = {graph_json};
       const elem = document.getElementById('graph');
@@ -132,14 +146,44 @@ def render_3d_graph(data):
           .graphData(gData)
           .nodeAutoColorBy('group')
           .nodeRelSize(7)
-          .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 4 : 2)
-          .linkDirectionalParticleSpeed(link => link.value === 'CONTRADICTS' ? 0.01 : 0.005)
-          .linkWidth(link => link.value === 'CONTRADICTS' ? 3 : 1)
+          
+          // 1. Visible Titles permanently floating above nodes
+          .nodeThreeObjectExtend(true)
+          .nodeThreeObject(node => {{
+              const sprite = new SpriteText(node.name || node.id);
+              sprite.color = '#cbd5e1';
+              sprite.textHeight = 4;
+              sprite.center = new THREE.Vector2(0.5, -1.2); // Position above the sphere
+              return sprite;
+          }})
+          
+          // 2. Click interaction to view detailed context & Zoom
+          .onNodeClick(node => {{
+              // Populate and show the UI panel
+              document.getElementById('info-panel').style.display = 'block';
+              document.getElementById('info-title').innerText = node.name || node.id;
+              document.getElementById('info-desc').innerText = node.description || 'No detailed context extracted for this node.';
+              document.getElementById('info-group').innerText = node.group === 1 ? 'NEWS SOURCE' : 'EXTRACTED CLAIM';
+              
+              // Camera zoom physics
+              const distance = 80;
+              const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
+              Graph.cameraPosition(
+                  {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
+                  node, 
+                  2000 // ms transition
+              );
+          }})
+          
+          // 3. High Contrast Connections & Physics
+          .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 6 : 3)
+          .linkDirectionalParticleSpeed(link => link.value === 'CONTRADICTS' ? 0.015 : 0.008)
+          .linkWidth(link => link.value === 'CONTRADICTS' ? 4 : (link.value === 'SUPPORTS' ? 2 : 1))
           .linkLabel('value')
           .linkColor(link => {{
-              if (link.value === 'CONTRADICTS') return '#ef4444';
-              if (link.value === 'SUPPORTS') return '#10b981';
-              return '#64748b';
+              if (link.value === 'CONTRADICTS') return '#ff3333'; // Vibrant Red
+              if (link.value === 'SUPPORTS') return '#00ff66';    // Vibrant Green
+              return '#aaaaaa';                                   // Clean Grey for Reports
           }})
           .backgroundColor('#0B0F19');
           
@@ -147,7 +191,7 @@ def render_3d_graph(data):
           Graph.width(elem.clientWidth).height(elem.clientHeight);
       }});
     </script>
-    <style> body {{ margin: 0; background: transparent; }} </style>
+    <style> body {{ margin: 0; background: transparent; overflow: hidden; }} </style>
     """
     components.html(html_code, height=600)
 
@@ -169,12 +213,14 @@ if st.button("Initialize Logic Audit"):
                 st.write("📡 Accessing global news APIs...")
                 news = fetch_news(query)
                 
-                st.write(f"🧠 AI Engine (2.5 Flash Lite) compiling logical topology...")
+                # Model name hidden from UI as requested
+                st.write("🧠 AI Engine compiling logical topology...")
                 graph_data = generate_graph_data(news)
                 
                 status.update(label="Audit Complete", state="complete", expanded=False)
                 
                 st.markdown("### Topology Map")
+                st.caption("🖱️ **Interact:** Rotate to explore. **Click any node** to view its extracted context.")
                 render_3d_graph(graph_data)
                 
                 st.markdown("### Verified Data Ledger")
@@ -195,7 +241,7 @@ with st.sidebar:
     st.write("🟢 **AI Engine:** Linked")
     st.write("🟢 **Render Engine:** 3D Force-Directed")
     st.markdown("---")
-    st.caption("Visual Legend:")
-    st.markdown("<span style='color: #ef4444;'>█</span> Contradiction", unsafe_allow_html=True)
-    st.markdown("<span style='color: #10b981;'>█</span> Support", unsafe_allow_html=True)
-    st.markdown("<span style='color: #64748b;'>█</span> Report / Mention", unsafe_allow_html=True)
+    st.caption("Connection Legend:")
+    st.markdown("<span style='color: #ff3333;'>██</span> Contradicts (High Conflict)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #00ff66;'>██</span> Supports (Consensus)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #aaaaaa;'>██</span> Reports (Origin)", unsafe_allow_html=True)
