@@ -4,12 +4,14 @@ import google.generativeai as genai
 import json
 import streamlit.components.v1 as components
 
-st.set_page_config(layout="wide", page_title="Disonance 3D")
+st.set_page_config(layout="wide", page_title="Disonance Engine 3D")
 
-TAVILY_API_KEY = "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-tavily"
+# API Keys
+TAVILY_API_KEY = "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"
 AI_ENGINE_KEY = "AIzaSyAbwTIkuJU4CkZdVpwCNmr3R4hfzml5AKs"
 
 def fetch_news(query):
+    # This layer bypasses the 'Scraping Wall' of major news outlets
     tavily = TavilyClient(api_key=TAVILY_API_KEY)
     response = tavily.search(query=query, search_depth="advanced", max_results=5)
     return response['results']
@@ -20,25 +22,34 @@ def generate_graph_data(news_results):
     
     context = "\n".join([f"Source: {r['title']} - Content: {r['content']}" for r in news_results])
     
+    # Strict JSON instruction for the Disonance Engine
     prompt = f"""
-    Analyze these news snippets: {context}
-    1. Extract the 5 most important 'Claim' nodes.
-    2. Extract the 'Source' names as nodes.
-    3. Create links: 
-       - 'SUPPORTS' if a source confirms a claim.
-       - 'CONTRADICTS' if two claims or sources disagree.
+    [CONTEXT]
+    {context}
+
+    [TASK]
+    As the Disonance Engine, perform a logical audit of the context.
+    1. Extract 5 most critical 'Claim' nodes (group: 2).
+    2. Extract 'Source' names as nodes (group: 1).
+    3. Create links between Sources and Claims.
+    4. Link Claims to each other ONLY if they logically 'CONTRADICTS' or 'SUPPORTS'.
     
-    Return ONLY a valid JSON object. No markdown formatting.
+    [OUTPUT]
+    Return ONLY a valid JSON object. No conversational text. No markdown.
     Structure:
     {{
-      "nodes": [{"id": "Name", "group": 1}],
-      "links": [{"source": "ID1", "target": "ID2", "value": "label"}]
+      "nodes": [{"id": "Node Name", "group": 1}],
+      "links": [{"source": "Node A", "target": "Node B", "value": "CONTRADICTS"}]
     }}
     """
     
-    response = model.generate_content(prompt)
-    clean_json = response.text.replace('```json', '').replace('```', '').strip()
-    return json.loads(clean_json)
+    # Using GenerationConfig to force JSON output and minimize errors
+    response = model.generate_content(
+        prompt, 
+        generation_config={"response_mime_type": "application/json"}
+    )
+    
+    return json.loads(response.text)
 
 def render_3d_graph(data):
     graph_json = json.dumps(data)
@@ -55,35 +66,49 @@ def render_3d_graph(data):
           .linkWidth(2)
           .linkLabel('value')
           .linkColor(link => link.value === 'CONTRADICTS' ? '#ff4b4b' : '#00ff7f');
+          
+      // Ensure the graph fits the window
+      window.addEventListener('resize', () => Graph.width(window.innerWidth).height(600));
     </script>
-    <style> body {{ margin: 0; overflow: hidden; font-family: sans-serif; }} </style>
+    <style> body {{ margin: 0; overflow: hidden; }} </style>
     """
     components.html(html_code, height=600)
 
-st.title("🌐 Narrative Auditor: 3D Knowledge Graph")
-st.markdown("Analyzing global news consensus and contradictions via a specialized AI Engine.")
+# UI Layout
+st.title("🌐 Disonance Engine: 3D Narrative Auditor")
+st.markdown("Mapping the logical landscape of global news consensus and contradiction.")
 
-query = st.text_input("Enter a global event to audit:", placeholder="e.g. US-Iran relations")
+query = st.text_input("Enter a news event to analyze:", placeholder="e.g. Geopolitical tensions in 2026")
 
-if st.button("Analyze Narratives"):
-    with st.spinner("AI Engine is auditing claims..."):
-        try:
-            news = fetch_news(query)
-            graph_data = generate_graph_data(news)
-            
-            st.subheader(f"3D Narrative Map: {query}")
-            render_3d_graph(graph_data)
-            
-            with st.expander("View Verified Data Sources"):
-                for item in news:
-                    st.write(f"🔗 **[{item['title']}]({item['url']})**")
-                    st.write(f"Source Snippet: {item['content'][:300]}...")
-                    st.divider()
-                    
-        except Exception as e:
-            st.error(f"Analysis interrupted. Please check network connection.")
+if st.button("Run Disonance Audit"):
+    if not query:
+        st.warning("Please enter a query first.")
+    else:
+        with st.spinner("Disonance Engine is auditing global narratives..."):
+            try:
+                # Stage 1: Search
+                news = fetch_news(query)
+                
+                # Stage 2: Logical Audit
+                graph_data = generate_graph_data(news)
+                
+                # Stage 3: Visual Synthesis
+                st.subheader(f"Logical Map for: {query}")
+                render_3d_graph(graph_data)
+                
+                # Stage 4: Documentation
+                with st.expander("Audit Trail (Raw Data)"):
+                    for item in news:
+                        st.write(f"🔗 **[{item['title']}]({item['url']})**")
+                        st.write(f"Snippet: {item['content'][:300]}...")
+                        st.divider()
+                        
+            except Exception as e:
+                # Detailed error logging for debugging
+                st.error(f"Disonance Engine Error: {str(e)}")
+                st.info("Check if your API keys are still active or if the query was too broad.")
 
-st.sidebar.title("System Status")
-st.sidebar.success("AI Engine: Online")
-st.sidebar.success("News API: Connected")
-st.sidebar.info("This system uses a custom-prompted AI Engine to perform logical verification across multiple international news sources.")
+st.sidebar.title("Disonance Engine Status")
+st.sidebar.write("● Node Processing: **Active**")
+st.sidebar.write("● Verification Layer: **Strict**")
+st.sidebar.write("● Visualization: **3D Force-Directed**")
