@@ -8,6 +8,7 @@ import streamlit.components.v1 as components
 # --- 1. PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(layout="wide", page_title="Disonance Engine | Audit", initial_sidebar_state="expanded")
 
+# Injecting professional SaaS-like CSS
 st.markdown("""
 <style>
     #MainMenu {visibility: hidden;}
@@ -46,7 +47,8 @@ st.markdown("""
 
 # --- 2. SECURE CREDENTIALS ---
 TAVILY_API_KEY = "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"
-AI_ENGINE_KEY = "AIzaSyAyTNUZ7ZkaRNGdL-QD5om4_iGzbdEMmp4"
+# Updated with your new key
+AI_ENGINE_KEY = "AIzaSyAJioZHv3AXVij5P5b3rHBEVlCDet3chGo"
 
 # --- 3. CORE LOGIC ENGINE ---
 def fetch_news(query):
@@ -57,35 +59,38 @@ def fetch_news(query):
     return response['results']
 
 def extract_json_safely(text):
+    """Parses JSON even if the AI wraps it in markdown blocks."""
     try:
         return json.loads(text)
     except json.JSONDecodeError:
+        # Fallback: Use regex to extract the first valid JSON object found
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
             return json.loads(match.group(0))
-        raise ValueError("AI Engine failed to structure data correctly.")
+        raise ValueError("The AI Engine response was not in a valid JSON format.")
 
 def generate_graph_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
     
-    # Targetting the Gemini 2.5 Flash architecture
-    model = genai.GenerativeModel('gemini-2.5-flash') 
+    # Updated to Gemini 2.5 Flash Lite
+    model = genai.GenerativeModel('gemini-2.5-flash-lite')
     
     context = "\n".join([f"[{r['title']}] - {r['content']}" for r in news_results])
     
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
-    Analyze the provided global news context.
+    Analyze the provided global news context for logical consensus and dissonance.
     
-    Extract exactly 5 'Claim' nodes (group: 2).
-    Extract involved 'Source' nodes (group: 1).
-    Link claims to sources (value: 'REPORTS').
-    Link claims to other claims ONLY if they directly conflict (value: 'CONTRADICTS') or align (value: 'SUPPORTS').
+    TASK:
+    1. Extract exactly 5 'Claim' nodes (group: 2).
+    2. Extract 'Source' names as nodes (group: 1).
+    3. Link sources to claims using 'REPORTS'.
+    4. Link claims to each other using 'CONTRADICTS' or 'SUPPORTS'.
     
-    OUTPUT FORMAT MUST BE RAW JSON.
+    OUTPUT FORMAT: RAW JSON ONLY.
     {{
-      "nodes": [{{"id": "String", "group": 1}}],
-      "links": [{{"source": "String", "target": "String", "value": "String"}}]
+      "nodes": [{{ "id": "String", "group": 1 }}],
+      "links": [{{ "source": "String", "target": "String", "value": "String" }}]
     }}
     
     [CONTEXT]
@@ -99,13 +104,16 @@ def generate_graph_data(news_results):
     
     raw_data = extract_json_safely(response.text)
     
+    # --- Data Sanitizer: Prevent Ghost Nodes (Fixes common 3D render crashes) ---
     node_ids = {node['id'] for node in raw_data.get('nodes', [])}
-    clean_links = [
-        link for link in raw_data.get('links', []) 
-        if link['source'] in node_ids and link['target'] in node_ids
-    ]
-    raw_data['links'] = clean_links
-    
+    if 'links' in raw_data:
+        raw_data['links'] = [
+            link for link in raw_data['links'] 
+            if link.get('source') in node_ids and link.get('target') in node_ids
+        ]
+    else:
+        raw_data['links'] = []
+        
     return raw_data
 
 # --- 4. 3D VISUAL SYNTHESIS ---
@@ -123,7 +131,7 @@ def render_3d_graph(data):
       const Graph = ForceGraph3D()(elem)
           .graphData(gData)
           .nodeAutoColorBy('group')
-          .nodeRelSize(6)
+          .nodeRelSize(7)
           .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 4 : 2)
           .linkDirectionalParticleSpeed(link => link.value === 'CONTRADICTS' ? 0.01 : 0.005)
           .linkWidth(link => link.value === 'CONTRADICTS' ? 3 : 1)
@@ -150,18 +158,18 @@ with col1:
     st.title("Disonance Engine")
     st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Real-time spatial mapping of global narrative consensus and contradiction.</p>", unsafe_allow_html=True)
 
-query = st.text_input("Target Subject / Event", placeholder="Enter subject to begin audit...")
+query = st.text_input("Target Subject / Event", placeholder="Enter geopolitical event, market shift, or global narrative to audit...")
 
 if st.button("Initialize Logic Audit"):
     if not query.strip():
-        st.warning("Please define a target subject.")
+        st.warning("Please define a target subject to begin the audit.")
     else:
         with st.status("Deploying Disonance Engine...", expanded=True) as status:
             try:
                 st.write("📡 Accessing global news APIs...")
                 news = fetch_news(query)
                 
-                st.write("🧠 AI Engine compiling logical topology...")
+                st.write(f"🧠 AI Engine (2.5 Flash Lite) compiling logical topology...")
                 graph_data = generate_graph_data(news)
                 
                 status.update(label="Audit Complete", state="complete", expanded=False)
@@ -184,8 +192,8 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Linked")
-    st.write("🟢 **Render Engine:** 3D Force")
+    st.write("🟢 **AI Engine:** 2.5 Flash Lite")
+    st.write("🟢 **Render Engine:** 3D Force-Directed")
     st.markdown("---")
     st.caption("Visual Legend:")
     st.markdown("<span style='color: #ef4444;'>█</span> Contradiction", unsafe_allow_html=True)
