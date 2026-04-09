@@ -23,7 +23,11 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SIDEBAR METRICS & CREDENTIALS ---
+# --- 2. SECURE CREDENTIALS (HARDCODED PER REQUEST) ---
+TAVILY_API_KEY = "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"
+AI_ENGINE_KEY = "AIzaSyAX1R8ufSSRO2BS-VmhInAJkVe7QWCCN_E"
+
+# --- 3. SIDEBAR TELEMETRY ---
 with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
@@ -35,13 +39,8 @@ with st.sidebar:
     st.markdown("<span style='color: #ff3333; font-weight: bold;'>█</span> CONTRADICTION (Conflict)", unsafe_allow_html=True)
     st.markdown("<span style='color: #00ff66; font-weight: bold;'>█</span> SUPPORT (Consensus)", unsafe_allow_html=True)
     st.markdown("<span style='color: #64748b; font-weight: bold;'>█</span> REPORT (Neutral Link)", unsafe_allow_html=True)
-    st.markdown("---")
-    
-    # Secure credential inputs in sidebar
-    TAVILY_API_KEY = st.text_input("Tavily API Key", value="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", type="password")
-    AI_ENGINE_KEY = st.text_input("AI Engine Key", value="AIzaSyAX1R8ufSSRO2BS-VmhInAJkVe7QWCCN_E", type="password")
 
-# --- 3. CORE LOGIC ENGINE ---
+# --- 4. CORE LOGIC ENGINE ---
 def fetch_news(query):
     tavily = TavilyClient(api_key=TAVILY_API_KEY)
     response = tavily.search(query=query, search_depth="advanced", max_results=6)
@@ -51,8 +50,6 @@ def fetch_news(query):
 
 def generate_graph_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
-    
-    # Model configuration - strictly using 2.5 flash lite as requested
     model = genai.GenerativeModel('gemini-2.5-flash-lite')
     
     context = "\n".join([f"[{r['title']}] - {r['content']}" for r in news_results])
@@ -69,7 +66,7 @@ def generate_graph_data(news_results):
     Context: {context}
     """
     
-    # Fix for PermissionDenied: Disable safety blockers for logical analysis
+    # Safety settings to prevent Permission/Blocked errors during dissonance analysis
     safety = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -83,16 +80,14 @@ def generate_graph_data(news_results):
         safety_settings=safety
     )
     
-    # Extract JSON content accurately
     clean_json = re.search(r'\{.*\}', response.text, re.DOTALL).group(0)
     data = json.loads(clean_json)
     
-    # Sanitizer to prevent Ghost Nodes
     node_ids = {node['id'] for node in data.get('nodes', [])}
     data['links'] = [l for l in data.get('links', []) if l.get('source') in node_ids and l.get('target') in node_ids]
     return data
 
-# --- 4. 3D VISUAL SYNTHESIS ---
+# --- 5. 3D VISUAL SYNTHESIS ---
 def render_3d_graph(data):
     graph_json = json.dumps(data)
     html_code = f"""
@@ -131,7 +126,6 @@ def render_3d_graph(data):
                   document.getElementById('info-title').innerText = node.name || node.id;
                   document.getElementById('info-desc').innerText = node.description || 'No additional data compiled.';
                   
-                  // Zoom on click
                   const distance = 100;
                   const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
                   Graph.cameraPosition(
@@ -153,7 +147,7 @@ def render_3d_graph(data):
     """
     components.html(html_code, height=620)
 
-# --- 5. MAIN USER INTERFACE ---
+# --- 6. MAIN USER INTERFACE ---
 st.title("Disonance Engine")
 st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Real-time spatial audit of global narrative logical structures.</p>", unsafe_allow_html=True)
 
@@ -174,7 +168,7 @@ if st.button("Initialize Logic Audit"):
                 
                 status.update(label="Audit Complete", state="complete", expanded=False)
                 
-                # Immediate render below status
+                # Render results immediately after status collapses
                 st.subheader("Narrative Topology Map")
                 st.info("🖱️ **Interaction:** Click nodes to view AI-classified context. Contradictions (Red) move faster.")
                 render_3d_graph(graph_data)
