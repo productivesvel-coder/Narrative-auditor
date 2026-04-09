@@ -6,13 +6,13 @@ import streamlit.components.v1 as components
 
 st.set_page_config(layout="wide", page_title="Disonance Engine 3D")
 
-# API Keys
+# CLEAN API KEYS
 TAVILY_API_KEY = "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"
 AI_ENGINE_KEY = "AIzaSyAbwTIkuJU4CkZdVpwCNmr3R4hfzml5AKs"
 
 def fetch_news(query):
-    # This layer bypasses the 'Scraping Wall' of major news outlets
     tavily = TavilyClient(api_key=TAVILY_API_KEY)
+    # Search depth 'advanced' ensures we get full context for logic auditing
     response = tavily.search(query=query, search_depth="advanced", max_results=5)
     return response['results']
 
@@ -22,28 +22,21 @@ def generate_graph_data(news_results):
     
     context = "\n".join([f"Source: {r['title']} - Content: {r['content']}" for r in news_results])
     
-    # Strict JSON instruction for the Disonance Engine
     prompt = f"""
-    [CONTEXT]
-    {context}
-
-    [TASK]
-    As the Disonance Engine, perform a logical audit of the context.
-    1. Extract 5 most critical 'Claim' nodes (group: 2).
-    2. Extract 'Source' names as nodes (group: 1).
-    3. Create links between Sources and Claims.
-    4. Link Claims to each other ONLY if they logically 'CONTRADICTS' or 'SUPPORTS'.
+    Analyze this context: {context}
     
-    [OUTPUT]
-    Return ONLY a valid JSON object. No conversational text. No markdown.
-    Structure:
+    You are the Disonance Engine. Create a 3D knowledge map JSON.
+    1. Nodes: 5 'Claim' (group 2) and 'Source' names (group 1).
+    2. Links: 'SUPPORTS' or 'CONTRADICTS'.
+    
+    Output ONLY raw JSON. No markdown, no commentary.
     {{
-      "nodes": [{"id": "Node Name", "group": 1}],
-      "links": [{"source": "Node A", "target": "Node B", "value": "CONTRADICTS"}]
+      "nodes": [{"id": "Name", "group": 1}],
+      "links": [{"source": "ID1", "target": "ID2", "value": "label"}]
     }}
     """
     
-    # Using GenerationConfig to force JSON output and minimize errors
+    # Using specific config to force JSON and avoid interruptions
     response = model.generate_content(
         prompt, 
         generation_config={"response_mime_type": "application/json"}
@@ -54,7 +47,7 @@ def generate_graph_data(news_results):
 def render_3d_graph(data):
     graph_json = json.dumps(data)
     html_code = f"""
-    <div id="graph" style="background: #0e1117;"></div>
+    <div id="graph" style="background: #0e1117; width: 100vw; height: 600px;"></div>
     <script src="//cdn.jsdelivr.net/npm/3d-force-graph"></script>
     <script>
       const gData = {graph_json};
@@ -62,53 +55,49 @@ def render_3d_graph(data):
         (document.getElementById('graph'))
           .graphData(gData)
           .nodeAutoColorBy('group')
-          .linkDirectionalParticles(2)
+          .linkDirectionalParticles(3)
           .linkWidth(2)
           .linkLabel('value')
-          .linkColor(link => link.value === 'CONTRADICTS' ? '#ff4b4b' : '#00ff7f');
-          
-      // Ensure the graph fits the window
-      window.addEventListener('resize', () => Graph.width(window.innerWidth).height(600));
+          .linkColor(link => link.value === 'CONTRADICTS' ? '#ff4b4b' : '#00ff7f')
+          .backgroundColor('#0e1117');
     </script>
-    <style> body {{ margin: 0; overflow: hidden; }} </style>
+    <style> body {{ margin: 0; background: #0e1117; }} </style>
     """
     components.html(html_code, height=600)
 
-# UI Layout
 st.title("🌐 Disonance Engine: 3D Narrative Auditor")
-st.markdown("Mapping the logical landscape of global news consensus and contradiction.")
+st.markdown("Auditing the integrity of global information through spatial logic.")
 
-query = st.text_input("Enter a news event to analyze:", placeholder="e.g. Geopolitical tensions in 2026")
+query = st.text_input("Query for Disonance Audit:", placeholder="e.g. South China Sea tensions")
 
-if st.button("Run Disonance Audit"):
+if st.button("Initialize Engine"):
     if not query:
-        st.warning("Please enter a query first.")
+        st.error("Please enter a query.")
     else:
-        with st.spinner("Disonance Engine is auditing global narratives..."):
+        with st.spinner("Disonance Engine is analyzing logical contradictions..."):
             try:
-                # Stage 1: Search
+                # Execution Pipeline
                 news = fetch_news(query)
-                
-                # Stage 2: Logical Audit
                 graph_data = generate_graph_data(news)
                 
-                # Stage 3: Visual Synthesis
-                st.subheader(f"Logical Map for: {query}")
+                # Visual Render
+                st.subheader(f"Logical Audit Map: {query}")
                 render_3d_graph(graph_data)
                 
-                # Stage 4: Documentation
-                with st.expander("Audit Trail (Raw Data)"):
+                with st.expander("Data Integrity Report (Sources)"):
                     for item in news:
-                        st.write(f"🔗 **[{item['title']}]({item['url']})**")
-                        st.write(f"Snippet: {item['content'][:300]}...")
+                        st.write(f"📂 **{item['title']}**")
+                        st.caption(item['url'])
                         st.divider()
                         
             except Exception as e:
-                # Detailed error logging for debugging
-                st.error(f"Disonance Engine Error: {str(e)}")
-                st.info("Check if your API keys are still active or if the query was too broad.")
+                # This now reveals the EXACT error for debugging
+                st.error(f"Engine Diagnostic: {str(e)}")
+                if "401" in str(e):
+                    st.info("Check: One of your API keys might be expired or blocked.")
+                elif "json" in str(e).lower():
+                    st.info("Check: The AI Engine returned an invalid data format.")
 
-st.sidebar.title("Disonance Engine Status")
-st.sidebar.write("● Node Processing: **Active**")
-st.sidebar.write("● Verification Layer: **Strict**")
-st.sidebar.write("● Visualization: **3D Force-Directed**")
+st.sidebar.title("Engine Metrics")
+st.sidebar.metric("Status", "Operational")
+st.sidebar.metric("Verification Mode", "Strict")
