@@ -192,7 +192,7 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** 2.5 Flash Lite")
+    st.write("🟢 **AI Engine:** Linked")
     st.write("🟢 **Render Engine:** 3D Force-Directed")
     st.markdown("---")
     st.caption("Visual Legend:")
