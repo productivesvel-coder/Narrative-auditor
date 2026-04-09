@@ -4,7 +4,7 @@ import google.generativeai as genai
 import json
 import streamlit.components.v1 as components
 
-st.set_page_config(layout="wide", page_title="Narrative Auditor 3D")
+st.set_page_config(layout="wide", page_title="Disonance 3D")
 
 TAVILY_API_KEY = "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-tavily"
 AI_ENGINE_KEY = "AIzaSyAbwTIkuJU4CkZdVpwCNmr3R4hfzml5AKs"
