@@ -8,22 +8,18 @@ import streamlit.components.v1 as components
 # --- 1. PAGE CONFIGURATION & CUSTOM CSS ---
 st.set_page_config(layout="wide", page_title="Disonance Engine | Audit", initial_sidebar_state="expanded")
 
-# Injecting professional SaaS-like CSS
 st.markdown("""
 <style>
-    /* Hide Streamlit branding */
     #MainMenu {visibility: hidden;}
     footer {visibility: hidden;}
     header {visibility: hidden;}
     
-    /* Modern typography and spacing */
     .block-container {
         padding-top: 2rem;
         padding-bottom: 2rem;
         font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
     }
     
-    /* Sleek inputs and buttons */
     .stTextInput input {
         border-radius: 8px;
         border: 1px solid #334155;
@@ -61,12 +57,9 @@ def fetch_news(query):
     return response['results']
 
 def extract_json_safely(text):
-    """Bulletproof parser to find JSON even if the AI wraps it in markdown/text."""
     try:
-        # Try direct parsing first
         return json.loads(text)
     except json.JSONDecodeError:
-        # Fallback: Use regex to rip the JSON object out of the string
         match = re.search(r'\{.*\}', text, re.DOTALL)
         if match:
             return json.loads(match.group(0))
@@ -74,7 +67,9 @@ def extract_json_safely(text):
 
 def generate_graph_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
-    model = genai.GenerativeModel('gemini-1.5-pro') # Using pro for complex logic mapping
+    
+    # Targetting the Gemini 2.5 Flash architecture
+    model = genai.GenerativeModel('gemini-2.5-flash') 
     
     context = "\n".join([f"[{r['title']}] - {r['content']}" for r in news_results])
     
@@ -97,7 +92,6 @@ def generate_graph_data(news_results):
     {context}
     """
     
-    # Fixed the unhashable dict bug here: standard dictionary syntax used.
     response = model.generate_content(
         prompt, 
         generation_config={"response_mime_type": "application/json"}
@@ -105,7 +99,6 @@ def generate_graph_data(news_results):
     
     raw_data = extract_json_safely(response.text)
     
-    # --- Data Sanitizer: Prevent Ghost Nodes ---
     node_ids = {node['id'] for node in raw_data.get('nodes', [])}
     clean_links = [
         link for link in raw_data.get('links', []) 
@@ -136,13 +129,12 @@ def render_3d_graph(data):
           .linkWidth(link => link.value === 'CONTRADICTS' ? 3 : 1)
           .linkLabel('value')
           .linkColor(link => {{
-              if (link.value === 'CONTRADICTS') return '#ef4444'; // Bright Red
-              if (link.value === 'SUPPORTS') return '#10b981'; // Emerald Green
-              return '#64748b'; // Neutral Slate for generic reports
+              if (link.value === 'CONTRADICTS') return '#ef4444';
+              if (link.value === 'SUPPORTS') return '#10b981';
+              return '#64748b';
           }})
           .backgroundColor('#0B0F19');
           
-      // Ensure responsive resizing
       window.addEventListener('resize', () => {{
           Graph.width(elem.clientWidth).height(elem.clientHeight);
       }});
@@ -158,11 +150,11 @@ with col1:
     st.title("Disonance Engine")
     st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Real-time spatial mapping of global narrative consensus and contradiction.</p>", unsafe_allow_html=True)
 
-query = st.text_input("Target Subject / Event", placeholder="Enter geopolitical event, market shift, or global narrative to audit...")
+query = st.text_input("Target Subject / Event", placeholder="Enter subject to begin audit...")
 
 if st.button("Initialize Logic Audit"):
     if not query.strip():
-        st.warning("Please define a target subject to begin the audit.")
+        st.warning("Please define a target subject.")
     else:
         with st.status("Deploying Disonance Engine...", expanded=True) as status:
             try:
@@ -192,7 +184,7 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Linked")
+    st.write("🟢 **AI Engine:** 2.5 Flash Linked")
     st.write("🟢 **Render Engine:** 3D Force")
     st.markdown("---")
     st.caption("Visual Legend:")
