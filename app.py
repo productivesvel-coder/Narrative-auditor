@@ -172,3 +172,14 @@ if st.button("Initialize Logic Audit"):
             with st.expander(item['title']):
                 st.caption(item['url'])
                 st.write(item['content'])
+with st.sidebar:
+    st.markdown("### System Telemetry")
+    st.markdown("---")
+    st.write("🟢 **Data Fetcher:** Active")
+    st.write("🟢 **AI Engine:** Operational")
+    st.write("🟢 **Render Engine:** WebGL 3D")
+    st.markdown("---")
+    st.caption("Dissonance Metrics:")
+    st.markdown("<span style='color: #ff3333; font-weight: bold;'>█</span> CONTRADICTION (Conflict)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #00ff66; font-weight: bold;'>█</span> SUPPORT (Consensus)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #64748b; font-weight: bold;'>█</span> REPORT (Neutral Link)", unsafe_allow_html=True)
