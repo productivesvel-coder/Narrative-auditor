@@ -23,9 +23,9 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SECURE CREDENTIALS (HARDCODED PER REQUEST) ---
-TAVILY_API_KEY = "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"
-AI_ENGINE_KEY = "AIzaSyAX1R8ufSSRO2BS-VmhInAJkVe7QWCCN_E"
+# --- 2. SECURE CREDENTIALS (VIA STREAMLIT SECRETS) ---
+TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
+AI_ENGINE_KEY = st.secrets["AI_ENGINE_KEY"]
 
 # --- 3. SIDEBAR TELEMETRY ---
 with st.sidebar:
