@@ -48,6 +48,27 @@ def fetch_news(query):
         raise ValueError("No verified news sources found.")
     return response['results']
 
+def repair_json(json_str):
+    """The Nuclear Option: Force-closes open JSON structures."""
+    json_str = json_str.strip()
+    # Remove problematic trailing characters that aren't structural
+    json_str = re.sub(r'[^}\]" \w]$', '', json_str)
+    
+    # Check for unterminated string
+    if json_str.count('"') % 2 != 0:
+        json_str += '"'
+        
+    # Stack-based closure
+    stack = []
+    for char in json_str:
+        if char == '{': stack.append('}')
+        elif char == '[': stack.append(']')
+        elif char in '}]':
+            if stack and stack[-1] == char:
+                stack.pop()
+                
+    return json_str + "".join(reversed(stack))
+
 def generate_audit_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
     model = genai.GenerativeModel('gemini-2.5-flash')
@@ -93,33 +114,30 @@ def generate_audit_data(news_results):
     
     raw_text = response.text.strip()
     
-    # 1. Extraction: Find the actual JSON object if AI added fluff
+    # 1. Extraction: Greedy search for the outermost braces
     json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
-    if json_match:
-        clean_text = json_match.group(1)
-    else:
-        clean_text = raw_text
+    clean_text = json_match.group(1) if json_match else raw_text
 
-    # 2. Sanitization: Strip control characters (Unicode 0-31) that break JSON strings
+    # 2. Character Washing: Remove control chars and repair slash escapes
     clean_text = "".join(char for char in clean_text if ord(char) >= 32 or char in "\n\r\t")
-    
-    # 3. Literal Newline Fix: Replace real line breaks inside strings with spaces
-    clean_text = re.sub(r'(?<!\\)\n', ' ', clean_text)
+    clean_text = clean_text.replace('\\"', '[[QUOTE]]').replace('"', '\\"').replace('[[QUOTE]]', '\\"')
 
     try:
-        # Use strict=False to be more lenient with formatting
         data = json.loads(clean_text, strict=False)
-    except json.JSONDecodeError as e:
-        # Emergency recovery: Remove all non-essential formatting
-        st.warning("Engine Dissonance: Initializing data recovery...")
-        super_clean = "".join(char for char in clean_text if ord(char) >= 32)
-        data = json.loads(super_clean, strict=False)
+    except json.JSONDecodeError:
+        # 3. Trigger repair logic if parse fails
+        try:
+            repaired_text = repair_json(clean_text)
+            data = json.loads(repaired_text, strict=False)
+        except:
+            # Last ditch: strip all non-json characters
+            super_stripped = re.sub(r'[^\x20-\x7E]', '', clean_text)
+            data = json.loads(repair_json(super_stripped), strict=False)
     
     # 4. Schema Enforcement
     if "graph" not in data: data["graph"] = {"nodes": [], "links": []}
     if "summary" not in data: data["summary"] = {"common_claims": [], "contradictions": []}
     
-    # Sanitizing links to prevent ghost nodes
     node_ids = {node['id'] for node in data['graph'].get('nodes', [])}
     data['graph']['links'] = [l for l in data['graph'].get('links', []) 
                               if l.get('source') in node_ids and l.get('target') in node_ids]
