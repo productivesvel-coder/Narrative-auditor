@@ -33,7 +33,7 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Operational")
+    st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
     st.write("🟢 **Render Engine:** WebGL 3D")
     st.markdown("---")
     st.caption("Dissonance Metrics:")
@@ -93,9 +93,14 @@ def generate_audit_data(news_results):
         {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
     ]
 
+    # FIX 3: Optimized generation config for speed and precision
     response = model.generate_content(
         prompt, 
-        generation_config={"response_mime_type": "application/json"},
+        generation_config={
+            "response_mime_type": "application/json",
+            "temperature": 0.1,
+            "max_output_tokens": 1024
+        },
         safety_settings=safety
     )
     
@@ -118,7 +123,8 @@ def generate_audit_data(news_results):
 # --- 5. 3D VISUAL SYNTHESIS ---
 def render_3d_graph(graph_data):
     graph_json = json.dumps(graph_data)
-    # 2 & 3. UI Updates for better formatting and contrasting visual weights
+    
+    # FIX 1: Cleaned the script tags so the browser can load the JS libraries properly
     html_code = f"""
     <div id="graph-wrapper" style="position: relative; border-radius: 12px; background: #0B0F19; overflow: hidden; height: 600px; border: 1px solid #1e293b;">
         <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 320px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 100; font-family: 'Inter', sans-serif;">
@@ -129,9 +135,9 @@ def render_3d_graph(graph_data):
         <div id="graph" style="width: 100%; height: 100%;"></div>
     </div>
     
-    <script src="[https://unpkg.com/three](https://unpkg.com/three)"></script>
-    <script src="[https://unpkg.com/three-spritetext](https://unpkg.com/three-spritetext)"></script>
-    <script src="[https://unpkg.com/3d-force-graph](https://unpkg.com/3d-force-graph)"></script>
+    <script src="https://unpkg.com/three"></script>
+    <script src="https://unpkg.com/three-spritetext"></script>
+    <script src="https://unpkg.com/3d-force-graph"></script>
     
     <script>
       window.onload = function() {{
@@ -203,52 +209,56 @@ if st.button("Initialize Logic Audit"):
         st.warning("Query required.")
     else:
         status_placeholder = st.empty()
-        with status_placeholder.status("Deploying Disonance Engine...", expanded=True) as status:
-            try:
+        
+        try:
+            # FIX 2: This block only handles the loading state. Rendering happens after.
+            with status_placeholder.status("Deploying Disonance Engine...", expanded=True) as status:
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
                 
-                st.write("🧠 AI Engine mapping logical dissonance...")
+                st.write("🧠 AI Engine (Gemini 2.5 Flash) mapping logical dissonance...")
                 payload = generate_audit_data(news)
-                graph_data = payload.get("graph", {})
-                summary_data = payload.get("summary", {})
                 
                 status.update(label="Audit Complete", state="complete", expanded=False)
-                
-                # Top: 3D Visualization
-                st.subheader("Narrative Topology Map")
-                st.info("🖱️ **Interaction:** Click nodes to view detailed claims and sources. Contradictions (Red) move faster.")
-                render_3d_graph(graph_data)
-                
-                # Bottom: AI Summary & Ledgers
-                st.markdown("---")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Consensus & Claims")
-                    claims = summary_data.get("common_claims", [])
-                    if claims:
-                        for claim in claims:
-                            st.success(f"✓ {claim}")
-                    else:
-                        st.write("No major consensus detected.")
-                        
-                with col2:
-                    st.subheader("Key Contradictions")
-                    contradictions = summary_data.get("contradictions", [])
-                    if contradictions:
-                        for contra in contradictions:
-                            st.error(f"⚠️ {contra}")
-                    else:
-                        st.write("No major contradictions detected.")
-                
-                st.markdown("---")
-                st.subheader("Verified Data Ledger")
-                for item in news:
-                    with st.expander(f"Source: {item['title']}"):
-                        st.caption(f"URL: {item['url']}")
-                        st.write(item['content'])
-                        
-            except Exception as e:
-                status.update(label="Audit Failure", state="error")
-                st.error(f"System Halt: {str(e)}")
+
+            # --- RENDERING OUTSIDE THE STATUS DROPDOWN ---
+            graph_data = payload.get("graph", {})
+            summary_data = payload.get("summary", {})
+            
+            # Top: 3D Visualization
+            st.subheader("Narrative Topology Map")
+            st.info("🖱️ **Interaction:** Click nodes to view detailed claims and sources. Contradictions (Red) move faster.")
+            render_3d_graph(graph_data)
+            
+            # Bottom: AI Summary & Ledgers
+            st.markdown("---")
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("Consensus & Claims")
+                claims = summary_data.get("common_claims", [])
+                if claims:
+                    for claim in claims:
+                        st.success(f"✓ {claim}")
+                else:
+                    st.write("No major consensus detected.")
+                    
+            with col2:
+                st.subheader("Key Contradictions")
+                contradictions = summary_data.get("contradictions", [])
+                if contradictions:
+                    for contra in contradictions:
+                        st.error(f"⚠️ {contra}")
+                else:
+                    st.write("No major contradictions detected.")
+            
+            st.markdown("---")
+            st.subheader("Verified Data Ledger")
+            for item in news:
+                with st.expander(f"Source: {item['title']}"):
+                    st.caption(f"URL: {item['url']}")
+                    st.write(item['content'])
+                    
+        except Exception as e:
+            # Revert the status UI to show the error
+            status_placeholder.error(f"System Halt: {str(e)}")
