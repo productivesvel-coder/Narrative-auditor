@@ -24,6 +24,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # --- 2. SECURE CREDENTIALS (VIA STREAMLIT SECRETS) ---
+# Ensure your .streamlit/secrets.toml contains TAVILY_API_KEY and AI_ENGINE_KEY
 TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
 AI_ENGINE_KEY = st.secrets["AI_ENGINE_KEY"]
 
@@ -32,13 +33,13 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Operational")
+    st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
     st.write("🟢 **Render Engine:** WebGL 3D")
     st.markdown("---")
     st.caption("Dissonance Metrics:")
-    st.markdown("<span style='color: #ff3333; font-weight: bold;'>█</span> CONTRADICTION (Conflict)", unsafe_allow_html=True)
-    st.markdown("<span style='color: #00ff66; font-weight: bold;'>█</span> SUPPORT (Consensus)", unsafe_allow_html=True)
-    st.markdown("<span style='color: #64748b; font-weight: bold;'>█</span> REPORT (Neutral Link)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #ff003c; font-weight: bold;'>█</span> CONTRADICTION (Conflict)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #00ff7f; font-weight: bold;'>█</span> SUPPORT (Consensus)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #475569; font-weight: bold;'>█</span> REPORT (Neutral Link)", unsafe_allow_html=True)
 
 # --- 4. CORE LOGIC ENGINE ---
 def fetch_news(query):
@@ -48,25 +49,43 @@ def fetch_news(query):
         raise ValueError("No verified news sources found.")
     return response['results']
 
-def generate_graph_data(news_results):
+def generate_audit_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
-    model = genai.GenerativeModel('gemini-2.5-flash-lite')
+    # 1. Updated Model to 2.5 Flash
+    model = genai.GenerativeModel('gemini-2.5-flash')
     
-    context = "\n".join([f"[{r['title']}] - {r['content']}" for r in news_results])
+    context = "\n".join([f"[{r['title']} | {r['url']}] - {r['content']}" for r in news_results])
     
+    # 3 & 4. Ask for summary data alongside the graph data, enforce naming schemas
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
     Analyze for logical consensus and dissonance. 
-    1. Extract 5 'Claim' nodes (group 2).
-    2. Extract 'Source' nodes (group 1).
-    3. Link using 'REPORTS', 'CONTRADICTS', or 'SUPPORTS'.
-    4. Provide 'name' (short) and 'description' (detailed context) for every node.
     
-    OUTPUT: RAW JSON ONLY.
+    Return a RAW JSON object with exactly this structure:
+    {{
+      "graph": {{
+        "nodes": [
+          {{"id": "unique_id", "group": 1_or_2, "name": "Short Topic Title", "description": "Detailed claim/info...", "source": "Publisher or URL"}}
+        ],
+        "links": [
+          {{"source": "source_node_id", "target": "target_node_id", "value": "CONTRADICTS" | "SUPPORTS" | "REPORTS"}}
+        ]
+      }},
+      "summary": {{
+        "common_claims": ["claim 1", "claim 2"],
+        "contradictions": ["contradiction 1", "contradiction 2"]
+      }}
+    }}
+    
+    Rules for Graph:
+    - Group 1: Source Nodes. Group 2: Claim Nodes.
+    - Extract up to 6 'Claim' nodes and link them to their 'Source' nodes.
+    - EVERY node must have a short, punchy 'name' and a detailed 'description'.
+    
+    OUTPUT RAW JSON ONLY.
     Context: {context}
     """
     
-    # Safety settings to prevent Permission/Blocked errors during dissonance analysis
     safety = [
         {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
         {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
@@ -80,29 +99,39 @@ def generate_graph_data(news_results):
         safety_settings=safety
     )
     
-    clean_json = re.search(r'\{.*\}', response.text, re.DOTALL).group(0)
-    data = json.loads(clean_json)
+    # 5. Robust JSON Cleaning
+    raw_text = response.text.strip()
+    if raw_text.startswith("```json"):
+        raw_text = raw_text[7:]
+    if raw_text.endswith("```"):
+        raw_text = raw_text[:-3]
+    raw_text = raw_text.strip()
     
-    node_ids = {node['id'] for node in data.get('nodes', [])}
-    data['links'] = [l for l in data.get('links', []) if l.get('source') in node_ids and l.get('target') in node_ids]
+    data = json.loads(raw_text)
+    
+    # Ghost node sanitizer on the graph object
+    node_ids = {node['id'] for node in data['graph'].get('nodes', [])}
+    data['graph']['links'] = [l for l in data['graph'].get('links', []) if l.get('source') in node_ids and l.get('target') in node_ids]
+    
     return data
 
 # --- 5. 3D VISUAL SYNTHESIS ---
-def render_3d_graph(data):
-    graph_json = json.dumps(data)
+def render_3d_graph(graph_data):
+    graph_json = json.dumps(graph_data)
+    # 2 & 3. UI Updates for better formatting and contrasting visual weights
     html_code = f"""
     <div id="graph-wrapper" style="position: relative; border-radius: 12px; background: #0B0F19; overflow: hidden; height: 600px; border: 1px solid #1e293b;">
-        <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 300px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 100; font-family: 'Inter', sans-serif;">
-            <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px;"></h3>
-            <hr style="border: 0; border-top: 1px solid #334155; margin: 10px 0;">
-            <p id="info-desc" style="font-size: 14px; line-height: 1.5; color: #e2e8f0;"></p>
+        <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 320px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 100; font-family: 'Inter', sans-serif;">
+            <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px; line-height: 1.2;"></h3>
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 12px 0;">
+            <div id="info-content"></div>
         </div>
         <div id="graph" style="width: 100%; height: 100%;"></div>
     </div>
     
-    <script src="https://unpkg.com/three"></script>
-    <script src="https://unpkg.com/three-spritetext"></script>
-    <script src="https://unpkg.com/3d-force-graph"></script>
+    <script src="[https://unpkg.com/three](https://unpkg.com/three)"></script>
+    <script src="[https://unpkg.com/three-spritetext](https://unpkg.com/three-spritetext)"></script>
+    <script src="[https://unpkg.com/3d-force-graph](https://unpkg.com/3d-force-graph)"></script>
     
     <script>
       window.onload = function() {{
@@ -116,16 +145,31 @@ def render_3d_graph(data):
               .nodeThreeObject(node => {{
                   const sprite = new SpriteText(node.name || node.id);
                   sprite.color = '#f8fafc';
-                  sprite.textHeight = 4;
-                  sprite.center = new THREE.Vector2(0.5, -1.5);
+                  sprite.textHeight = 5;
+                  sprite.center = new THREE.Vector2(0.5, -1.2);
                   return sprite;
               }})
               .onNodeClick(node => {{
                   const panel = document.getElementById('info-panel');
                   panel.style.display = 'block';
-                  document.getElementById('info-title').innerText = node.name || node.id;
-                  document.getElementById('info-desc').innerText = node.description || 'No additional data compiled.';
                   
+                  // Setting Title
+                  document.getElementById('info-title').innerText = node.name || node.id;
+                  
+                  // Setting Content (Info heavily emphasized, Source muted below)
+                  const infoText = node.description || 'No detailed data available.';
+                  const sourceText = node.source || 'Unknown Publisher';
+                  
+                  document.getElementById('info-content').innerHTML = `
+                      <p style="font-size: 15px; line-height: 1.5; color: #e2e8f0; margin-bottom: 15px;">
+                          ${{infoText}}
+                      </p>
+                      <p style="font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 10px;">
+                          <strong>Source:</strong> ${{sourceText}}
+                      </p>
+                  `;
+                  
+                  // Camera Zoom
                   const distance = 100;
                   const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
                   Graph.cameraPosition(
@@ -135,12 +179,13 @@ def render_3d_graph(data):
                   );
               }})
               .linkColor(link => {{
-                  if (link.value === 'CONTRADICTS') return '#ff3333';
-                  if (link.value === 'SUPPORTS') return '#00ff66';
-                  return '#64748b';
+                  if (link.value === 'CONTRADICTS') return '#ff003c'; // Neon Red
+                  if (link.value === 'SUPPORTS') return '#00ff7f';    // Spring Green
+                  return '#475569';                                   // Muted Slate
               }})
-              .linkWidth(link => link.value === 'CONTRADICTS' ? 4 : 2)
-              .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 5 : 2)
+              .linkWidth(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
+              .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
+              .linkDirectionalParticleWidth(link => link.value === 'CONTRADICTS' ? 4 : 2)
               .backgroundColor('#0B0F19');
       }};
     </script>
@@ -163,15 +208,39 @@ if st.button("Initialize Logic Audit"):
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
                 
-                st.write("🧠 AI Engine mapping logical dissonance...")
-                graph_data = generate_graph_data(news)
+                st.write("🧠 AI Engine (Gemini 2.5 Flash) mapping logical dissonance...")
+                payload = generate_audit_data(news)
+                graph_data = payload.get("graph", {})
+                summary_data = payload.get("summary", {})
                 
                 status.update(label="Audit Complete", state="complete", expanded=False)
                 
-                # Render results immediately after status collapses
+                # Top: 3D Visualization
                 st.subheader("Narrative Topology Map")
-                st.info("🖱️ **Interaction:** Click nodes to view AI-classified context. Contradictions (Red) move faster.")
+                st.info("🖱️ **Interaction:** Click nodes to view detailed claims and sources. Contradictions (Red) move faster.")
                 render_3d_graph(graph_data)
+                
+                # Bottom: AI Summary & Ledgers
+                st.markdown("---")
+                col1, col2 = st.columns(2)
+                
+                with col1:
+                    st.subheader("Consensus & Claims")
+                    claims = summary_data.get("common_claims", [])
+                    if claims:
+                        for claim in claims:
+                            st.success(f"✓ {claim}")
+                    else:
+                        st.write("No major consensus detected.")
+                        
+                with col2:
+                    st.subheader("Key Contradictions")
+                    contradictions = summary_data.get("contradictions", [])
+                    if contradictions:
+                        for contra in contradictions:
+                            st.error(f"⚠️ {contra}")
+                    else:
+                        st.write("No major contradictions detected.")
                 
                 st.markdown("---")
                 st.subheader("Verified Data Ledger")
