@@ -23,8 +23,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SECURE CREDENTIALS (VIA STREAMLIT SECRETS) ---
-# Ensure your .streamlit/secrets.toml contains TAVILY_API_KEY and AI_ENGINE_KEY
+# --- 2. SECURE CREDENTIALS ---
 TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
 AI_ENGINE_KEY = st.secrets["AI_ENGINE_KEY"]
 
@@ -51,12 +50,10 @@ def fetch_news(query):
 
 def generate_audit_data(news_results):
     genai.configure(api_key=AI_ENGINE_KEY)
-    # 1. Updated Model to 2.5 Flash
     model = genai.GenerativeModel('gemini-2.5-flash')
     
     context = "\n".join([f"[{r['title']} | {r['url']}] - {r['content']}" for r in news_results])
     
-    # 3 & 4. Ask for summary data alongside the graph data, enforce naming schemas
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
     Analyze for logical consensus and dissonance. 
@@ -65,7 +62,7 @@ def generate_audit_data(news_results):
     {{
       "graph": {{
         "nodes": [
-          {{"id": "unique_id", "group": 1_or_2, "name": "Short Topic Title", "description": "Detailed claim/info...", "source": "Publisher or URL"}}
+          {{"id": "unique_id", "group": 1, "name": "Short Topic Title", "description": "Detailed claim/info...", "source": "Publisher or URL"}}
         ],
         "links": [
           {{"source": "source_node_id", "target": "target_node_id", "value": "CONTRADICTS" | "SUPPORTS" | "REPORTS"}}
@@ -77,44 +74,43 @@ def generate_audit_data(news_results):
       }}
     }}
     
-    Rules for Graph:
-    - Group 1: Source Nodes. Group 2: Claim Nodes.
-    - Extract up to 6 'Claim' nodes and link them to their 'Source' nodes.
-    - EVERY node must have a short, punchy 'name' and a detailed 'description'.
+    CRITICAL FORMATTING RULES:
+    1. Do NOT use literal newlines inside descriptions. Use " " or "\\n".
+    2. Escape all double quotes inside strings (e.g., \\").
+    3. Ensure all JSON keys and values are properly closed.
     
-    OUTPUT RAW JSON ONLY.
     Context: {context}
     """
     
-    safety = [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    ]
+    safety = [{"category": c, "threshold": "BLOCK_NONE"} for c in [
+        "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", 
+        "HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_SEXUALLY_EXPLICIT"
+    ]]
 
-    # FIX 3: Optimized generation config for speed and precision
+    # Optimized for Speed and Precision
     response = model.generate_content(
         prompt, 
         generation_config={
             "response_mime_type": "application/json",
             "temperature": 0.1,
-            "max_output_tokens": 1024
+            "max_output_tokens": 2048
         },
         safety_settings=safety
     )
     
-    # 5. Robust JSON Cleaning
     raw_text = response.text.strip()
-    if raw_text.startswith("```json"):
-        raw_text = raw_text[7:]
-    if raw_text.endswith("```"):
-        raw_text = raw_text[:-3]
-    raw_text = raw_text.strip()
+    # Clean markdown formatting if model ignores mime_type instruction
+    raw_text = re.sub(r'^```json\s*|\s*```$', '', raw_text, flags=re.MULTILINE)
     
-    data = json.loads(raw_text)
+    try:
+        # strict=False handles many "unterminated string" issues caused by control chars
+        data = json.loads(raw_text, strict=False)
+    except json.JSONDecodeError:
+        # Emergency Regex: Replaces literal newlines inside quotes that break JSON
+        fixed_text = re.sub(r'\n(?=[^"]*"(?:[^"]*"[^"]*")*[^"]*$)', ' ', raw_text)
+        data = json.loads(fixed_text, strict=False)
     
-    # Ghost node sanitizer on the graph object
+    # Ghost node sanitizer
     node_ids = {node['id'] for node in data['graph'].get('nodes', [])}
     data['graph']['links'] = [l for l in data['graph'].get('links', []) if l.get('source') in node_ids and l.get('target') in node_ids]
     
@@ -124,7 +120,6 @@ def generate_audit_data(news_results):
 def render_3d_graph(graph_data):
     graph_json = json.dumps(graph_data)
     
-    # FIX 1: Cleaned the script tags so the browser can load the JS libraries properly
     html_code = f"""
     <div id="graph-wrapper" style="position: relative; border-radius: 12px; background: #0B0F19; overflow: hidden; height: 600px; border: 1px solid #1e293b;">
         <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 320px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 100; font-family: 'Inter', sans-serif;">
@@ -158,40 +153,28 @@ def render_3d_graph(graph_data):
               .onNodeClick(node => {{
                   const panel = document.getElementById('info-panel');
                   panel.style.display = 'block';
-                  
-                  // Setting Title
                   document.getElementById('info-title').innerText = node.name || node.id;
                   
-                  // Setting Content (Info heavily emphasized, Source muted below)
                   const infoText = node.description || 'No detailed data available.';
                   const sourceText = node.source || 'Unknown Publisher';
                   
                   document.getElementById('info-content').innerHTML = `
-                      <p style="font-size: 15px; line-height: 1.5; color: #e2e8f0; margin-bottom: 15px;">
-                          ${{infoText}}
-                      </p>
+                      <p style="font-size: 15px; line-height: 1.5; color: #e2e8f0; margin-bottom: 15px;">${{infoText}}</p>
                       <p style="font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 10px;">
                           <strong>Source:</strong> ${{sourceText}}
-                      </p>
-                  `;
+                      </p>`;
                   
-                  // Camera Zoom
                   const distance = 100;
                   const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
-                  Graph.cameraPosition(
-                      {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
-                      node, 
-                      1200
-                  );
+                  Graph.cameraPosition({{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }}, node, 1200);
               }})
               .linkColor(link => {{
-                  if (link.value === 'CONTRADICTS') return '#ff003c'; // Neon Red
-                  if (link.value === 'SUPPORTS') return '#00ff7f';    // Spring Green
-                  return '#475569';                                   // Muted Slate
+                  if (link.value === 'CONTRADICTS') return '#ff003c';
+                  if (link.value === 'SUPPORTS') return '#00ff7f';
+                  return '#475569';
               }})
-              .linkWidth(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
-              .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
-              .linkDirectionalParticleWidth(link => link.value === 'CONTRADICTS' ? 4 : 2)
+              .linkWidth(link => link.value === 'CONTRADICTS' ? 5 : 2)
+              .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 5 : 2)
               .backgroundColor('#0B0F19');
       }};
     </script>
@@ -211,46 +194,36 @@ if st.button("Initialize Logic Audit"):
         status_placeholder = st.empty()
         
         try:
-            # FIX 2: This block only handles the loading state. Rendering happens after.
+            # Loading UI
             with status_placeholder.status("Deploying Disonance Engine...", expanded=True) as status:
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
-                
                 st.write("🧠 AI Engine mapping logical dissonance...")
                 payload = generate_audit_data(news)
-                
                 status.update(label="Audit Complete", state="complete", expanded=False)
 
-            # --- RENDERING OUTSIDE THE STATUS DROPDOWN ---
+            # Results Display (Outside the status block for immediate visibility)
             graph_data = payload.get("graph", {})
             summary_data = payload.get("summary", {})
             
-            # Top: 3D Visualization
             st.subheader("Narrative Topology Map")
-            st.info("🖱️ **Interaction:** Click nodes to view detailed claims and sources. Contradictions (Red) move faster.")
+            st.info("🖱️ **Interaction:** Click nodes to view detailed claims and sources.")
             render_3d_graph(graph_data)
             
-            # Bottom: AI Summary & Ledgers
             st.markdown("---")
             col1, col2 = st.columns(2)
             
             with col1:
                 st.subheader("Consensus & Claims")
                 claims = summary_data.get("common_claims", [])
-                if claims:
-                    for claim in claims:
-                        st.success(f"✓ {claim}")
-                else:
-                    st.write("No major consensus detected.")
+                for claim in claims: st.success(f"✓ {claim}")
+                if not claims: st.write("No major consensus detected.")
                     
             with col2:
                 st.subheader("Key Contradictions")
                 contradictions = summary_data.get("contradictions", [])
-                if contradictions:
-                    for contra in contradictions:
-                        st.error(f"⚠️ {contra}")
-                else:
-                    st.write("No major contradictions detected.")
+                for contra in contradictions: st.error(f"⚠️ {contra}")
+                if not contradictions: st.write("No major contradictions detected.")
             
             st.markdown("---")
             st.subheader("Verified Data Ledger")
@@ -260,5 +233,4 @@ if st.button("Initialize Logic Audit"):
                     st.write(item['content'])
                     
         except Exception as e:
-            # Revert the status UI to show the error
             status_placeholder.error(f"System Halt: {str(e)}")
