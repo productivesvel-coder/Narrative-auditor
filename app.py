@@ -56,66 +56,50 @@ def generate_audit_data(news_results):
     
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
-    Analyze for logical consensus and dissonance. 
+    Return a RAW JSON object. 
     
-    Return a RAW JSON object with exactly this structure:
-    {{
-      "graph": {{
-        "nodes": [
-          {{"id": "unique_id", "group": 1, "name": "Short Topic Title", "description": "Detailed claim/info...", "source": "Publisher or URL"}}
-        ],
-        "links": [
-          {{"source": "source_node_id", "target": "target_node_id", "value": "CONTRADICTS" | "SUPPORTS" | "REPORTS"}}
-        ]
-      }},
-      "summary": {{
-        "common_claims": ["claim 1", "claim 2"],
-        "contradictions": ["contradiction 1", "contradiction 2"]
-      }}
-    }}
-    
-    CRITICAL FORMATTING RULES:
-    1. Do NOT use literal newlines inside descriptions. Use " " or "\\n".
-    2. Escape all double quotes inside strings (e.g., \\").
-    3. Ensure all JSON keys and values are properly closed.
-    
+    IMPORTANT: 
+    1. Use ONLY single-line strings for 'description'. 
+    2. If you use quotes inside a string, escape them with a backslash (\\").
+    3. Do NOT include any text outside the JSON brackets.
+
     Context: {context}
     """
     
-    safety = [{"category": c, "threshold": "BLOCK_NONE"} for c in [
-        "HARM_CATEGORY_HARASSMENT", "HARM_CATEGORY_HATE_SPEECH", 
-        "HARM_CATEGORY_DANGEROUS_CONTENT", "HARM_CATEGORY_SEXUALLY_EXPLICIT"
-    ]]
-
-    # Optimized for Speed and Precision
     response = model.generate_content(
         prompt, 
         generation_config={
             "response_mime_type": "application/json",
             "temperature": 0.1,
-            "max_output_tokens": 2048
-        },
-        safety_settings=safety
+            "max_output_tokens": 2048 # Increased to prevent cut-offs
+        }
     )
     
     raw_text = response.text.strip()
-    # Clean markdown formatting if model ignores mime_type instruction
-    raw_text = re.sub(r'^```json\s*|\s*```$', '', raw_text, flags=re.MULTILINE)
     
+    # --- THE POWER WASHER CLEANER ---
+    # 1. Remove Markdown code blocks if the AI added them
+    clean_text = re.sub(r'^```json\s*|\s*```$', '', raw_text, flags=re.MULTILINE)
+    
+    # 2. Fix literal newlines inside the JSON strings that cause "Unterminated String"
+    # This looks for newlines that aren't followed by a JSON structural character
+    clean_text = re.sub(r'(?<!\\)\n', ' ', clean_text) 
+
     try:
-        # strict=False handles many "unterminated string" issues caused by control chars
-        data = json.loads(raw_text, strict=False)
-    except json.JSONDecodeError:
-        # Emergency Regex: Replaces literal newlines inside quotes that break JSON
-        fixed_text = re.sub(r'\n(?=[^"]*"(?:[^"]*"[^"]*")*[^"]*$)', ' ', raw_text)
-        data = json.loads(fixed_text, strict=False)
+        # strict=False allows the parser to ignore some non-standard characters
+        data = json.loads(clean_text, strict=False)
+    except json.JSONDecodeError as e:
+        # If it still fails, we do one last desperate attempt: stripping all control characters
+        st.error(f"JSON Recovery Mode Active: {str(e)}")
+        clean_text = "".join(char for char in clean_text if ord(char) >= 32)
+        data = json.loads(clean_text, strict=False)
     
-    # Ghost node sanitizer
+    # Sanitizing links to prevent ghost nodes
     node_ids = {node['id'] for node in data['graph'].get('nodes', [])}
-    data['graph']['links'] = [l for l in data['graph'].get('links', []) if l.get('source') in node_ids and l.get('target') in node_ids]
+    data['graph']['links'] = [l for l in data['graph'].get('links', []) 
+                              if l.get('source') in node_ids and l.get('target') in node_ids]
     
     return data
-
 # --- 5. 3D VISUAL SYNTHESIS ---
 def render_3d_graph(graph_data):
     graph_json = json.dumps(graph_data)
