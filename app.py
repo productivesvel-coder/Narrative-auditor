@@ -56,24 +56,28 @@ def generate_audit_data(news_results):
     
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
-    Analyze for logical consensus and dissonance. Return a RAW JSON object.
-    
-    STRUCTURE:
+    Analyze for logical consensus and dissonance. 
+    Return a RAW JSON object with this exact structure:
     {{
       "graph": {{
-        "nodes": [{{"id": "...", "group": 1, "name": "...", "description": "...", "source": "..."}}],
-        "links": [{{"source": "...", "target": "...", "value": "CONTRADICTS"}}]
+        "nodes": [
+          {{"id": "id1", "group": 1, "name": "...", "description": "...", "source": "..."}}
+        ],
+        "links": [
+          {{"source": "id1", "target": "id2", "value": "CONTRADICTS"}}
+        ]
       }},
       "summary": {{
         "common_claims": [],
         "contradictions": []
       }}
     }}
-    
-    CRITICAL RULES:
-    1. Output ONLY valid JSON. No conversational text.
-    2. Use ONLY single-line strings. NO literal newlines (\\n) inside strings.
+
+    STRICT JSON PROTOCOL:
+    1. Output ONLY the JSON object.
+    2. No literal newlines within string values.
     3. Escape all internal double quotes with a backslash (\\").
+    4. Do not include markdown code blocks.
 
     Context: {context}
     """
@@ -87,29 +91,31 @@ def generate_audit_data(news_results):
         }
     )
     
-    # --- ERROR-PROOF EXTRACTION ---
-    raw_text = response.text
+    raw_text = response.text.strip()
     
-    # 1. Regex to find the JSON object block (handles leading/trailing AI chatter)
+    # 1. Extraction: Find the actual JSON object if AI added fluff
     json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
-    if not json_match:
-        raise ValueError("AI failed to return a valid JSON structure.")
+    if json_match:
+        clean_text = json_match.group(1)
+    else:
+        clean_text = raw_text
+
+    # 2. Sanitization: Strip control characters (Unicode 0-31) that break JSON strings
+    clean_text = "".join(char for char in clean_text if ord(char) >= 32 or char in "\n\r\t")
     
-    clean_text = json_match.group(1)
-    
-    # 2. Scrub literal newlines and control characters that break Python's json.loads
-    # Removes actual line breaks inside the string and replaces them with a space
-    clean_text = re.sub(r'[\x00-\x1F\x7F]', ' ', clean_text) 
+    # 3. Literal Newline Fix: Replace real line breaks inside strings with spaces
+    clean_text = re.sub(r'(?<!\\)\n', ' ', clean_text)
 
     try:
-        # strict=False allows control characters if any survived the scrub
+        # Use strict=False to be more lenient with formatting
         data = json.loads(clean_text, strict=False)
-    except json.JSONDecodeError:
-        # Final emergency attempt: Remove all problematic backslashes except for quotes
-        clean_text = clean_text.replace('\\', '\\\\').replace('\\\\"', '\\"')
-        data = json.loads(clean_text, strict=False)
+    except json.JSONDecodeError as e:
+        # Emergency recovery: Remove all non-essential formatting
+        st.warning("Engine Dissonance: Initializing data recovery...")
+        super_clean = "".join(char for char in clean_text if ord(char) >= 32)
+        data = json.loads(super_clean, strict=False)
     
-    # 3. Final Schema Validation (ensure keys exist)
+    # 4. Schema Enforcement
     if "graph" not in data: data["graph"] = {"nodes": [], "links": []}
     if "summary" not in data: data["summary"] = {"common_claims": [], "contradictions": []}
     
