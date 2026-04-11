@@ -33,7 +33,7 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
+    st.write("🟢 **AI Engine:** Operational")
     st.write("🟢 **Render Engine:** WebGL 3D")
     st.markdown("---")
     st.caption("Dissonance Metrics:")
@@ -208,7 +208,7 @@ if st.button("Initialize Logic Audit"):
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
                 
-                st.write("🧠 AI Engine (Gemini 2.5 Flash) mapping logical dissonance...")
+                st.write("🧠 AI Engine mapping logical dissonance...")
                 payload = generate_audit_data(news)
                 graph_data = payload.get("graph", {})
                 summary_data = payload.get("summary", {})
