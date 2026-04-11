@@ -56,12 +56,24 @@ def generate_audit_data(news_results):
     
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
-    Return a RAW JSON object. 
+    Analyze for logical consensus and dissonance. Return a RAW JSON object.
     
-    IMPORTANT: 
-    1. Use ONLY single-line strings for 'description'. 
-    2. If you use quotes inside a string, escape them with a backslash (\\").
-    3. Do NOT include any text outside the JSON brackets.
+    STRUCTURE:
+    {{
+      "graph": {{
+        "nodes": [{{"id": "...", "group": 1, "name": "...", "description": "...", "source": "..."}}],
+        "links": [{{"source": "...", "target": "...", "value": "CONTRADICTS"}}]
+      }},
+      "summary": {{
+        "common_claims": [],
+        "contradictions": []
+      }}
+    }}
+    
+    CRITICAL RULES:
+    1. Output ONLY valid JSON. No conversational text.
+    2. Use ONLY single-line strings. NO literal newlines (\\n) inside strings.
+    3. Escape all internal double quotes with a backslash (\\").
 
     Context: {context}
     """
@@ -71,28 +83,35 @@ def generate_audit_data(news_results):
         generation_config={
             "response_mime_type": "application/json",
             "temperature": 0.1,
-            "max_output_tokens": 2048 # Increased to prevent cut-offs
+            "max_output_tokens": 3000
         }
     )
     
-    raw_text = response.text.strip()
+    # --- ERROR-PROOF EXTRACTION ---
+    raw_text = response.text
     
-    # --- THE POWER WASHER CLEANER ---
-    # 1. Remove Markdown code blocks if the AI added them
-    clean_text = re.sub(r'^```json\s*|\s*```$', '', raw_text, flags=re.MULTILINE)
+    # 1. Regex to find the JSON object block (handles leading/trailing AI chatter)
+    json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
+    if not json_match:
+        raise ValueError("AI failed to return a valid JSON structure.")
     
-    # 2. Fix literal newlines inside the JSON strings that cause "Unterminated String"
-    # This looks for newlines that aren't followed by a JSON structural character
-    clean_text = re.sub(r'(?<!\\)\n', ' ', clean_text) 
+    clean_text = json_match.group(1)
+    
+    # 2. Scrub literal newlines and control characters that break Python's json.loads
+    # Removes actual line breaks inside the string and replaces them with a space
+    clean_text = re.sub(r'[\x00-\x1F\x7F]', ' ', clean_text) 
 
     try:
-        # strict=False allows the parser to ignore some non-standard characters
+        # strict=False allows control characters if any survived the scrub
         data = json.loads(clean_text, strict=False)
-    except json.JSONDecodeError as e:
-        # If it still fails, we do one last desperate attempt: stripping all control characters
-        st.error(f"JSON Recovery Mode Active: {str(e)}")
-        clean_text = "".join(char for char in clean_text if ord(char) >= 32)
+    except json.JSONDecodeError:
+        # Final emergency attempt: Remove all problematic backslashes except for quotes
+        clean_text = clean_text.replace('\\', '\\\\').replace('\\\\"', '\\"')
         data = json.loads(clean_text, strict=False)
+    
+    # 3. Final Schema Validation (ensure keys exist)
+    if "graph" not in data: data["graph"] = {"nodes": [], "links": []}
+    if "summary" not in data: data["summary"] = {"common_claims": [], "contradictions": []}
     
     # Sanitizing links to prevent ghost nodes
     node_ids = {node['id'] for node in data['graph'].get('nodes', [])}
@@ -100,6 +119,7 @@ def generate_audit_data(news_results):
                               if l.get('source') in node_ids and l.get('target') in node_ids]
     
     return data
+
 # --- 5. 3D VISUAL SYNTHESIS ---
 def render_3d_graph(graph_data):
     graph_json = json.dumps(graph_data)
@@ -178,7 +198,6 @@ if st.button("Initialize Logic Audit"):
         status_placeholder = st.empty()
         
         try:
-            # Loading UI
             with status_placeholder.status("Deploying Disonance Engine...", expanded=True) as status:
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
@@ -186,7 +205,6 @@ if st.button("Initialize Logic Audit"):
                 payload = generate_audit_data(news)
                 status.update(label="Audit Complete", state="complete", expanded=False)
 
-            # Results Display (Outside the status block for immediate visibility)
             graph_data = payload.get("graph", {})
             summary_data = payload.get("summary", {})
             
