@@ -20,10 +20,12 @@ st.markdown("""
         background: linear-gradient(135deg, #3b82f6 0%, #2563eb 100%);
         color: white; font-weight: 600; border: none; padding: 10px 24px; transition: 0.3s; width: 100%;
     }
+    div[data-testid="stExpander"] { background-color: #0B0F19; border: 1px solid #1e293b; border-radius: 8px; }
+    div[data-testid="stExpander"] summary p { font-weight: 600; color: #f8fafc; }
 </style>
 """, unsafe_allow_html=True)
 
-# --- 2. SECURE CREDENTIALS (VIA STREAMLIT SECRETS) ---
+# --- 2. SECURE CREDENTIALS ---
 TAVILY_API_KEY = st.secrets["TAVILY_API_KEY"]
 AI_ENGINE_KEY = st.secrets["AI_ENGINE_KEY"]
 
@@ -33,12 +35,11 @@ with st.sidebar:
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
     st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
-    st.write("🟢 **Render Engine:** WebGL 3D")
+    st.write("🟢 **Render Engine:** WebGL Pulse Vortex")
     st.markdown("---")
-    st.caption("Dissonance Metrics:")
-    st.markdown("<span style='color: #ff003c; font-weight: bold;'>█</span> CONTRADICTION (Conflict)", unsafe_allow_html=True)
-    st.markdown("<span style='color: #00ff7f; font-weight: bold;'>█</span> SUPPORT (Consensus)", unsafe_allow_html=True)
-    st.markdown("<span style='color: #475569; font-weight: bold;'>█</span> REPORT (Neutral Link)", unsafe_allow_html=True)
+    st.caption("Vortex Legend:")
+    st.markdown("<span style='color: #ff003c; font-weight: bold;'>●</span> CONTRADICTION (Turbulence)", unsafe_allow_html=True)
+    st.markdown("<span style='color: #00ff7f; font-weight: bold;'>●</span> CONSENSUS (Smooth Flow)", unsafe_allow_html=True)
 
 # --- 4. CORE LOGIC ENGINE ---
 def fetch_news(query):
@@ -49,21 +50,16 @@ def fetch_news(query):
     return response['results']
 
 def repair_json(json_str):
-    """The Nuclear Option: Force-closes open JSON structures."""
+    """Safety net to force-close broken JSON strings."""
     json_str = json_str.strip()
     json_str = re.sub(r'[^}\]" \w]$', '', json_str)
-    
-    if json_str.count('"') % 2 != 0:
-        json_str += '"'
-        
+    if json_str.count('"') % 2 != 0: json_str += '"'
     stack = []
     for char in json_str:
         if char == '{': stack.append('}')
         elif char == '[': stack.append(']')
         elif char in '}]':
-            if stack and stack[-1] == char:
-                stack.pop()
-                
+            if stack and stack[-1] == char: stack.pop()
     return json_str + "".join(reversed(stack))
 
 def generate_audit_data(news_results):
@@ -72,61 +68,44 @@ def generate_audit_data(news_results):
     
     context = "\n".join([f"[{r['title']} | {r['url']}] - {r['content']}" for r in news_results])
     
+    # Bulletproof prompt with extremely strict JSON rules and shorter text limits
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
-    Analyze for logical consensus and dissonance. 
+    Analyze the text for logical consensus and dissonance. 
     
-    Return a RAW JSON object with exactly this structure:
+    Return a RAW JSON object with EXACTLY this structure. Keep descriptions under 200 characters to prevent errors.
     {{
-      "graph": {{
-        "nodes": [
-          {{"id": "unique_id", "group": 1_or_2, "name": "Short Topic Title", "description": "Detailed claim/info...", "source": "Publisher or URL"}}
-        ],
-        "links": [
-          {{"source": "source_node_id", "target": "target_node_id", "value": "CONTRADICTS" | "SUPPORTS" | "REPORTS"}}
-        ]
-      }},
+      "particles": [
+        {{"id": "p1", "type": "consensus", "name": "Short Topic", "description": "Short detail...", "source": "Publisher Name"}},
+        {{"id": "p2", "type": "contradiction", "name": "Short Topic", "description": "Short detail...", "source": "Publisher Name"}}
+      ],
       "summary": {{
-        "common_claims": ["claim 1", "claim 2"],
-        "contradictions": ["contradiction 1", "contradiction 2"]
+        "common_claims": [
+          {{"title": "Claim 1", "detail": "Detailed explanation..."}}
+        ],
+        "contradictions": [
+          {{"title": "Conflict 1", "detail": "Detailed explanation..."}}
+        ]
       }}
     }}
     
-    Rules for Graph:
-    - Group 1: Source Nodes. Group 2: Claim Nodes.
-    - Extract up to 6 'Claim' nodes and link them to their 'Source' nodes.
-    - EVERY node must have a short, punchy 'name' and a detailed 'description'.
-    - DO NOT use literal newlines inside strings.
-    - Escape double quotes inside strings with \\".
+    Rules:
+    - Extract up to 10 'particles' total.
+    - 'type' MUST be either "consensus" or "contradiction".
+    - NO literal newlines inside strings.
+    - OUTPUT RAW JSON ONLY. NO MARKDOWN.
     
-    OUTPUT RAW JSON ONLY.
     Context: {context}
     """
     
-    safety = [
-        {"category": "HARM_CATEGORY_HARASSMENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_HATE_SPEECH", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_DANGEROUS_CONTENT", "threshold": "BLOCK_NONE"},
-        {"category": "HARM_CATEGORY_SEXUALLY_EXPLICIT", "threshold": "BLOCK_NONE"},
-    ]
-
     response = model.generate_content(
         prompt, 
-        generation_config={
-            "response_mime_type": "application/json",
-            "max_output_tokens": 8192,  # Fix for AI getting cut off
-            "temperature": 0.1
-        },
-        safety_settings=safety
+        generation_config={"response_mime_type": "application/json", "max_output_tokens": 8192, "temperature": 0.1}
     )
     
     raw_text = response.text.strip()
-    
-    # 1. Extraction: Greedy search for the outermost braces
     json_match = re.search(r'(\{.*\})', raw_text, re.DOTALL)
     clean_text = json_match.group(1) if json_match else raw_text
-
-    # 2. Character Washing: Remove control chars and literal newlines
     clean_text = "".join(char for char in clean_text if ord(char) >= 32 or char in "\n\r\t")
     clean_text = re.sub(r'(?<!\\)\n', ' ', clean_text)
 
@@ -134,92 +113,160 @@ def generate_audit_data(news_results):
         data = json.loads(clean_text, strict=False)
     except json.JSONDecodeError:
         try:
-            # 3. Apply the nuclear auto-healer if it still fails
-            repaired_text = repair_json(clean_text)
-            data = json.loads(repaired_text, strict=False)
+            data = json.loads(repair_json(clean_text), strict=False)
         except Exception:
-            # Absolute fallback so the app doesn't hard-crash
-            data = {
-                "graph": {"nodes": [], "links": []}, 
-                "summary": {"common_claims": [], "contradictions": ["AI output structure failed heavily. Please retry."]}
-            }
-    
-    # Ghost node sanitizer on the graph object
-    node_ids = {node['id'] for node in data.get('graph', {}).get('nodes', [])}
-    if 'graph' in data:
-        data['graph']['links'] = [l for l in data['graph'].get('links', []) if l.get('source') in node_ids and l.get('target') in node_ids]
+            # Fallback placeholder to prevent app crash
+            data = {"particles": [], "summary": {"common_claims": [], "contradictions": [{"title": "Data Parse Error", "detail": "AI output structure failed."}]}}
     
     return data
 
-# --- 5. 3D VISUAL SYNTHESIS ---
-def render_3d_graph(graph_data):
-    graph_json = json.dumps(graph_data)
-    # FIX: Corrected script tags (Removed markdown link syntax)
+# --- 5. 3D VISUAL SYNTHESIS (PULSE VORTEX) ---
+def render_3d_vortex(vortex_data):
+    vortex_json = json.dumps(vortex_data.get("particles", []))
+    
     html_code = f"""
-    <div id="graph-wrapper" style="position: relative; border-radius: 12px; background: #0B0F19; overflow: hidden; height: 600px; border: 1px solid #1e293b;">
+    <div id="graph-wrapper" style="position: relative; border-radius: 12px; background: #05080F; overflow: hidden; height: 600px; border: 1px solid #1e293b;">
         <div id="info-panel" style="position: absolute; top: 15px; right: 15px; width: 320px; background: rgba(15, 23, 42, 0.95); backdrop-filter: blur(10px); color: white; padding: 20px; border-radius: 12px; display: none; border: 1px solid #334155; z-index: 100; font-family: 'Inter', sans-serif;">
-            <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px; line-height: 1.2;"></h3>
-            <hr style="border: 0; border-top: 1px solid #334155; margin: 12px 0;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px;">
+                <h3 id="info-title" style="margin: 0; color: #60a5fa; font-size: 18px; line-height: 1.2;"></h3>
+                <span id="info-badge" style="font-size: 10px; padding: 2px 6px; border-radius: 4px; font-weight: bold; text-transform: uppercase;"></span>
+            </div>
+            <hr style="border: 0; border-top: 1px solid #334155; margin: 0 0 12px 0;">
             <div id="info-content"></div>
         </div>
-        <div id="graph" style="width: 100%; height: 100%;"></div>
+        <div id="vortex" style="width: 100%; height: 100%; cursor: crosshair;"></div>
     </div>
     
-    <script src="https://unpkg.com/three"></script>
-    <script src="https://unpkg.com/three-spritetext"></script>
-    <script src="https://unpkg.com/3d-force-graph"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
     
     <script>
       window.onload = function() {{
-          const gData = {graph_json};
-          const elem = document.getElementById('graph');
+          const pData = {vortex_json};
+          const elem = document.getElementById('vortex');
           
-          const Graph = ForceGraph3D()(elem)
-              .graphData(gData)
-              .nodeAutoColorBy('group')
-              .nodeThreeObjectExtend(true)
-              .nodeThreeObject(node => {{
-                  const sprite = new SpriteText(node.name || node.id);
-                  sprite.color = '#f8fafc';
-                  sprite.textHeight = 5;
-                  sprite.center = new THREE.Vector2(0.5, -1.2);
-                  return sprite;
-              }})
-              .onNodeClick(node => {{
+          // Scene Setup
+          const scene = new THREE.Scene();
+          scene.fog = new THREE.FogExp2(0x05080F, 0.015);
+          
+          const camera = new THREE.PerspectiveCamera(60, elem.clientWidth / elem.clientHeight, 0.1, 1000);
+          camera.position.set(0, 30, 60);
+          
+          const renderer = new THREE.WebGLRenderer({{ antialias: true, alpha: true }});
+          renderer.setSize(elem.clientWidth, elem.clientHeight);
+          renderer.setPixelRatio(window.devicePixelRatio);
+          elem.appendChild(renderer.domElement);
+          
+          const controls = new THREE.OrbitControls(camera, renderer.domElement);
+          controls.enableDamping = true;
+          controls.dampingFactor = 0.05;
+          controls.autoRotate = true;
+          controls.autoRotateSpeed = 1.0;
+          
+          // Core Vortex Pillar
+          const coreGeo = new THREE.CylinderGeometry(0.5, 0.5, 100, 16);
+          const coreMat = new THREE.MeshBasicMaterial({{ color: 0x1e293b, transparent: true, opacity: 0.3 }});
+          const core = new THREE.Mesh(coreGeo, coreMat);
+          scene.add(core);
+
+          // Particle System
+          const meshes = [];
+          pData.forEach((p, i) => {{
+              const isContra = p.type === 'contradiction';
+              const color = isContra ? 0xff003c : 0x00ff7f;
+              
+              const geo = new THREE.SphereGeometry(isContra ? 1.5 : 1.0, 16, 16);
+              const mat = new THREE.MeshBasicMaterial({{ color: color, wireframe: isContra }});
+              const mesh = new THREE.Mesh(geo, mat);
+              
+              mesh.userData = {{
+                  angle: Math.random() * Math.PI * 2,
+                  radius: 10 + Math.random() * 25,
+                  speed: (isContra ? 0.04 : 0.015) + Math.random() * 0.01,
+                  yOffset: (Math.random() - 0.5) * 40,
+                  isContra: isContra,
+                  info: p
+              }};
+              
+              // Give them a glowing aura
+              const glowGeo = new THREE.SphereGeometry(isContra ? 2.5 : 1.8, 16, 16);
+              const glowMat = new THREE.MeshBasicMaterial({{ color: color, transparent: true, opacity: 0.2 }});
+              const glow = new THREE.Mesh(glowGeo, glowMat);
+              mesh.add(glow);
+              
+              scene.add(mesh);
+              meshes.push(mesh);
+          }});
+
+          // Interaction (Raycasting)
+          const raycaster = new THREE.Raycaster();
+          const mouse = new THREE.Vector2();
+          
+          elem.addEventListener('pointerdown', (event) => {{
+              const rect = elem.getBoundingClientRect();
+              mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+              mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+              
+              raycaster.setFromCamera(mouse, camera);
+              const intersects = raycaster.intersectObjects(meshes);
+              
+              if (intersects.length > 0) {{
+                  const ud = intersects[0].object.userData;
                   const panel = document.getElementById('info-panel');
                   panel.style.display = 'block';
                   
-                  document.getElementById('info-title').innerText = node.name || node.id;
+                  document.getElementById('info-title').innerText = ud.info.name || 'Data Point';
                   
-                  const infoText = node.description || 'No detailed data available.';
-                  const sourceText = node.source || 'Unknown Publisher';
+                  const badge = document.getElementById('info-badge');
+                  badge.innerText = ud.isContra ? 'Conflict' : 'Consensus';
+                  badge.style.backgroundColor = ud.isContra ? 'rgba(255, 0, 60, 0.2)' : 'rgba(0, 255, 127, 0.2)';
+                  badge.style.color = ud.isContra ? '#ff003c' : '#00ff7f';
+                  
+                  const infoText = ud.info.description || 'No detailed data available.';
+                  const sourceText = ud.info.source || 'Unknown Publisher';
                   
                   document.getElementById('info-content').innerHTML = `
-                      <p style="font-size: 15px; line-height: 1.5; color: #e2e8f0; margin-bottom: 15px;">
-                          ${{infoText}}
-                      </p>
+                      <p style="font-size: 14px; line-height: 1.5; color: #e2e8f0; margin-bottom: 15px;">${{infoText}}</p>
                       <p style="font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 10px;">
                           <strong>Source:</strong> ${{sourceText}}
                       </p>
                   `;
+                  controls.autoRotate = false; // Stop spinning on click to let user read
+              }}
+          }});
+
+          // Animation Loop
+          function animate() {{
+              requestAnimationFrame(animate);
+              
+              meshes.forEach(m => {{
+                  let ud = m.userData;
+                  ud.angle += ud.speed;
                   
-                  const distance = 100;
-                  const distRatio = 1 + distance/Math.hypot(node.x, node.y, node.z);
-                  Graph.cameraPosition(
-                      {{ x: node.x * distRatio, y: node.y * distRatio, z: node.z * distRatio }},
-                      node, 
-                      1200
-                  );
-              }})
-              .linkColor(link => {{
-                  if (link.value === 'CONTRADICTS') return '#ff003c'; 
-                  if (link.value === 'SUPPORTS') return '#00ff7f';    
-                  return '#475569';                                   
-              }})
-              .linkWidth(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
-              .linkDirectionalParticles(link => link.value === 'CONTRADICTS' ? 5 : (link.value === 'SUPPORTS' ? 3 : 1))
-              .linkDirectionalParticleWidth(link => link.value === 'CONTRADICTS' ? 4 : 2)
-              .backgroundColor('#0B0F19');
+                  // Base Circular Orbit
+                  m.position.x = Math.cos(ud.angle) * ud.radius;
+                  m.position.z = Math.sin(ud.angle) * ud.radius;
+                  m.position.y = ud.yOffset;
+
+                  // Apply Turbulence to Contradictions
+                  if(ud.isContra) {{
+                      m.position.x += (Math.random() - 0.5) * 1.5;
+                      m.position.y += (Math.random() - 0.5) * 1.5;
+                      m.position.z += (Math.random() - 0.5) * 1.5;
+                  }}
+              }});
+              
+              controls.update();
+              renderer.render(scene, camera);
+          }}
+          
+          window.addEventListener('resize', () => {{
+              camera.aspect = elem.clientWidth / elem.clientHeight;
+              camera.updateProjectionMatrix();
+              renderer.setSize(elem.clientWidth, elem.clientHeight);
+          }});
+          
+          animate();
       }};
     </script>
     """
@@ -227,7 +274,7 @@ def render_3d_graph(graph_data):
 
 # --- 6. MAIN USER INTERFACE ---
 st.title("Disonance Engine")
-st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Real-time spatial audit of global narrative logical structures.</p>", unsafe_allow_html=True)
+st.markdown("<p style='color: #94a3b8; font-size: 1.1rem;'>Real-time fluid dynamic audit of global narrative logical structures.</p>", unsafe_allow_html=True)
 
 query = st.text_input("Target Subject / Event", placeholder="Enter geopolitical event or global narrative to audit...")
 
@@ -235,53 +282,59 @@ if st.button("Initialize Logic Audit"):
     if not query.strip():
         st.warning("Query required.")
     else:
-        status_placeholder = st.empty()
-        with status_placeholder.status("Deploying Disonance Engine...", expanded=True) as status:
-            try:
+        # Initialize an empty container for the status so we can leave it behind later
+        status_container = st.empty()
+        
+        try:
+            with status_container.status("Deploying Disonance Engine...", expanded=True) as status:
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
                 
-                st.write("🧠 AI Engine (Gemini 2.5 Flash) mapping logical dissonance...")
+                st.write("🧠 AI Engine (Gemini 2.5 Flash) synthesizing Pulse Vortex data...")
                 payload = generate_audit_data(news)
-                graph_data = payload.get("graph", {})
+                
                 summary_data = payload.get("summary", {})
                 
-                status.update(label="Audit Complete", state="complete", expanded=False)
-                
-                # Top: 3D Visualization
-                st.subheader("Narrative Topology Map")
-                st.info("🖱️ **Interaction:** Click nodes to view detailed claims and sources. Contradictions (Red) move faster.")
-                render_3d_graph(graph_data)
-                
-                # Bottom: AI Summary & Ledgers
-                st.markdown("---")
-                col1, col2 = st.columns(2)
-                
-                with col1:
-                    st.subheader("Consensus & Claims")
-                    claims = summary_data.get("common_claims", [])
-                    if claims:
-                        for claim in claims:
-                            st.success(f"✓ {claim}")
-                    else:
-                        st.write("No major consensus detected.")
-                        
-                with col2:
-                    st.subheader("Key Contradictions")
-                    contradictions = summary_data.get("contradictions", [])
-                    if contradictions:
-                        for contra in contradictions:
-                            st.error(f"⚠️ {contra}")
-                    else:
-                        st.write("No major contradictions detected.")
-                
-                st.markdown("---")
-                st.subheader("Verified Data Ledger")
-                for item in news:
-                    with st.expander(f"Source: {item['title']}"):
-                        st.caption(f"URL: {item['url']}")
-                        st.write(item['content'])
-                        
-            except Exception as e:
-                status.update(label="Audit Failure", state="error")
-                st.error(f"System Halt: {str(e)}")
+                status.update(label="Vortex Synthesis Complete", state="complete", expanded=False)
+            
+            # --- UI BREAKOUT: Everything below here displays AFTER the loader finishes ---
+            
+            st.subheader("Narrative Pulse Vortex")
+            st.info("🖱️ **Interaction:** Rotate and zoom with mouse. Click particles to read source data.")
+            render_3d_vortex(payload)
+            
+            st.markdown("<br><hr>", unsafe_allow_html=True)
+            
+            col1, col2 = st.columns(2)
+            
+            with col1:
+                st.subheader("🟢 Consensus Data Stream")
+                claims = summary_data.get("common_claims", [])
+                if claims:
+                    for claim in claims:
+                        # Dropdown expander for details
+                        with st.expander(f"✓ {claim.get('title', 'Verified Claim')}"):
+                            st.write(claim.get('detail', 'No detailed text provided.'))
+                else:
+                    st.write("No major consensus detected in the data stream.")
+                    
+            with col2:
+                st.subheader("🔴 Dissonance & Contradictions")
+                contradictions = summary_data.get("contradictions", [])
+                if contradictions:
+                    for contra in contradictions:
+                        # Dropdown expander for details
+                        with st.expander(f"⚠️ {contra.get('title', 'Logical Conflict')}"):
+                            st.write(contra.get('detail', 'No detailed text provided.'))
+                else:
+                    st.write("No major contradictions detected. The narrative is stable.")
+            
+            st.markdown("---")
+            st.subheader("Verified Data Ledger")
+            for item in news:
+                with st.expander(f"Source: {item['title']}"):
+                    st.caption(f"URL: {item['url']}")
+                    st.write(item['content'])
+                    
+        except Exception as e:
+            status_container.error(f"System Halt: {str(e)}")
