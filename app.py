@@ -22,6 +22,9 @@ st.markdown("""
     }
     div[data-testid="stExpander"] { background-color: #0B0F19; border: 1px solid #1e293b; border-radius: 8px; }
     div[data-testid="stExpander"] summary p { font-weight: 600; color: #f8fafc; }
+    /* Bias Meter CSS */
+    .bias-bar-bg { width: 100%; background: #1e293b; height: 6px; border-radius: 3px; margin-top: 5px; margin-bottom: 12px; }
+    .bias-bar-fill { height: 100%; border-radius: 3px; transition: width 0.5s ease-in-out; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -34,14 +37,14 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Operational")
-    st.write("🟢 **Render Engine:** WebGL Pulse Vortex")
+    st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
+    st.write("🟢 **Render Engine:** WebGL Adaptive Chroma")
     st.markdown("---")
     st.caption("Vortex Legend:")
     st.markdown("<span style='color: #ff003c; font-weight: bold;'>●</span> CONTRADICTION (Turbulence)", unsafe_allow_html=True)
     st.markdown("<span style='color: #00ff7f; font-weight: bold;'>●</span> CONSENSUS (Smooth Flow)", unsafe_allow_html=True)
     st.markdown("---")
-    st.info("🖱️ **Vortex Control:** Click the map to freeze/unfreeze flow. Red particles will continue to vibrate.")
+    st.info("🖱️ **Vortex Control:** Hover to feel particle mass. Click the map to freeze/unfreeze flow. Red particles will continue to vibrate.")
 
 # --- 4. CORE LOGIC ENGINE ---
 def fetch_news(query):
@@ -73,20 +76,20 @@ def generate_audit_data(news_results):
     # Bulletproof prompt with extremely strict JSON rules and shorter text limits
     prompt = f"""
     [SYSTEM PROTOCOL: DISONANCE ENGINE]
-    Analyze the text for logical consensus and dissonance. 
+    Analyze the text for logical consensus and dissonance. Perform a linguistic bias audit.
     
-    Return a RAW JSON object with EXACTLY this structure. Keep descriptions under 200 characters to prevent errors.
+    Return a RAW JSON object with EXACTLY this structure. Keep particle descriptions under 200 characters.
     {{
       "particles": [
-        {{"id": "p1", "type": "consensus", "name": "Short Topic", "description": "Short detail...", "source": "Publisher Name"}},
-        {{"id": "p2", "type": "contradiction", "name": "Short Topic", "description": "Short detail...", "source": "Publisher Name"}}
+        {{"id": "p1", "type": "consensus", "name": "Short Topic", "description": "Short detail...", "source": "Publisher Name", "bias_score": 0.2, "bias_label": "Neutral"}},
+        {{"id": "p2", "type": "contradiction", "name": "Short Topic", "description": "Short detail...", "source": "Publisher Name", "bias_score": 0.8, "bias_label": "Sensationalized"}}
       ],
       "summary": {{
         "common_claims": [
-          {{"title": "Claim 1", "detail": "Detailed explanation..."}}
+          {{"title": "Executive Thesis (1 sentence)", "detail": "Deep structural breakdown with evidence..."}}
         ],
         "contradictions": [
-          {{"title": "Conflict 1", "detail": "Detailed explanation..."}}
+          {{"title": "Conflict Thesis (1 sentence)", "detail": "Granular analysis of why these narratives diverge..."}}
         ]
       }}
     }}
@@ -94,6 +97,7 @@ def generate_audit_data(news_results):
     Rules:
     - Extract up to 10 'particles' total.
     - 'type' MUST be either "consensus" or "contradiction".
+    - 'bias_score' must be a float between 0.0 (Neutral) and 1.0 (Highly Loaded/Partisan).
     - NO literal newlines inside strings.
     - OUTPUT RAW JSON ONLY. NO MARKDOWN.
     
@@ -122,9 +126,14 @@ def generate_audit_data(news_results):
     
     return data
 
-# --- 5. 3D VISUAL SYNTHESIS (PULSE VORTEX) ---
+# --- 5. 3D VISUAL SYNTHESIS (ADAPTIVE CHROMA & MAGNETIC VORTEX) ---
 def render_3d_vortex(vortex_data):
-    vortex_json = json.dumps(vortex_data.get("particles", []))
+    particles = vortex_data.get("particles", [])
+    vortex_json = json.dumps(particles)
+    
+    # Calculate Dissonance Ratio for Chroma (0.0 to 1.0)
+    contra_count = sum(1 for p in particles if p.get('type') == 'contradiction')
+    ratio = contra_count / len(particles) if particles else 0.0
     
     html_code = f"""
     <div id="graph-wrapper" style="position: relative; border-radius: 12px; background: #05080F; overflow: hidden; height: 600px; border: 1px solid #1e293b;">
@@ -145,12 +154,19 @@ def render_3d_vortex(vortex_data):
     <script>
       window.onload = function() {{
           const pData = {vortex_json};
+          const disRatio = {ratio};
           const elem = document.getElementById('vortex');
           let isPaused = false;
           
           // Scene Setup
           const scene = new THREE.Scene();
-          scene.fog = new THREE.FogExp2(0x05080F, 0.015);
+          
+          // Adaptive Chroma: Interpolate between Deep Teal and Bruised Purple
+          const colorStable = new THREE.Color(0x002b2d);
+          const colorChaos = new THREE.Color(0x2e004f);
+          const bgColor = colorStable.clone().lerp(colorChaos, disRatio);
+          scene.background = bgColor;
+          scene.fog = new THREE.FogExp2(bgColor, 0.015);
           
           const camera = new THREE.PerspectiveCamera(60, elem.clientWidth / elem.clientHeight, 0.1, 1000);
           camera.position.set(0, 30, 60);
@@ -204,6 +220,12 @@ def render_3d_vortex(vortex_data):
           const raycaster = new THREE.Raycaster();
           const mouse = new THREE.Vector2();
           
+          elem.addEventListener('pointermove', (event) => {{
+              const rect = elem.getBoundingClientRect();
+              mouse.x = ((event.clientX - rect.left) / rect.width) * 2 - 1;
+              mouse.y = -((event.clientY - rect.top) / rect.height) * 2 + 1;
+          }});
+          
           elem.addEventListener('pointerdown', (event) => {{
               // Toggle Pause logic
               isPaused = !isPaused;
@@ -229,11 +251,13 @@ def render_3d_vortex(vortex_data):
                   
                   const infoText = ud.info.description || 'No detailed data available.';
                   const sourceText = ud.info.source || 'Unknown Publisher';
+                  const biasLabel = ud.info.bias_label || 'Neutral';
                   
                   document.getElementById('info-content').innerHTML = `
                       <p style="font-size: 14px; line-height: 1.5; color: #e2e8f0; margin-bottom: 15px;">${{infoText}}</p>
                       <p style="font-size: 12px; color: #94a3b8; border-top: 1px dashed #334155; padding-top: 10px;">
-                          <strong>Source:</strong> ${{sourceText}}
+                          <strong>Source:</strong> ${{sourceText}}<br>
+                          <strong>Bias Audit:</strong> ${{biasLabel}}
                       </p>
                   `;
               }}
@@ -243,8 +267,19 @@ def render_3d_vortex(vortex_data):
           function animate() {{
               requestAnimationFrame(animate);
               
+              raycaster.setFromCamera(mouse, camera);
+              const hoverIntersects = raycaster.intersectObjects(meshes);
+              const hoveredObj = hoverIntersects.length > 0 ? hoverIntersects[0].object : null;
+              
               meshes.forEach(m => {{
                   let ud = m.userData;
+                  
+                  // Magnetic Haptics: Scale up and 'tug' visually when hovered
+                  if (m === hoveredObj) {{
+                      m.scale.lerp(new THREE.Vector3(1.6, 1.6, 1.6), 0.15);
+                  }} else {{
+                      m.scale.lerp(new THREE.Vector3(1, 1, 1), 0.1);
+                  }}
                   
                   // Only increment angle if not paused
                   if (!isPaused) {{
@@ -308,7 +343,7 @@ if st.button("Initialize Logic Audit"):
             
             # --- UI BREAKOUT ---
             st.subheader("Narrative Pulse Vortex")
-            st.info("🖱️ **Interaction:** Click the map to **Freeze** orbital flow. Click particles to view intelligence metadata.")
+            st.info("🖱️ **Interaction:** Hover over particles for haptic response. Click the map to **Freeze** orbital flow. Click particles to view intelligence metadata.")
             render_3d_vortex(payload)
             
             st.markdown("<br><hr>", unsafe_allow_html=True)
@@ -322,6 +357,7 @@ if st.button("Initialize Logic Audit"):
                     # Each claim is a clear overview header with its own detailed dropdown
                     for claim in claims:
                         with st.expander(f"✓ {claim.get('title', 'Verified Claim')}"):
+                            st.markdown("**Structural Analysis:**")
                             st.write(claim.get('detail', 'No detailed text provided.'))
                 else:
                     st.write("No major consensus detected in the data stream.")
@@ -333,15 +369,44 @@ if st.button("Initialize Logic Audit"):
                     # Each contradiction is a clear overview header with its own detailed dropdown
                     for contra in contradictions:
                         with st.expander(f"⚠️ {contra.get('title', 'Logical Conflict')}"):
+                            st.markdown("**Conflict Breakdown:**")
                             st.write(contra.get('detail', 'No detailed text provided.'))
                 else:
                     st.write("No major contradictions detected. The narrative is stable.")
             
             st.markdown("---")
             st.subheader("Verified Data Ledger")
+            
+            # Build a map to extract bias scores for matching sources
+            particle_map = {}
+            for p in payload.get('particles', []):
+                # Basic normalization for matching
+                src_key = str(p.get('source', '')).strip().lower()
+                particle_map[src_key] = p
+                
             for item in news:
+                # Attempt to match the source from Tavily to the AI-generated particle bias
+                tavily_source_name = item['title'].split('|')[0].strip().lower()
+                matched_particle = particle_map.get(tavily_source_name, {})
+                
+                # Default to neutral if AI didn't cite this exact source in particles
+                bias_score = float(matched_particle.get('bias_score', 0.15))
+                bias_label = matched_particle.get('bias_label', 'Neutral / Standard Reporting')
+                
+                bias_pct = bias_score * 100
+                bar_color = '#3b82f6' if bias_pct < 40 else '#f59e0b' if bias_pct < 70 else '#ef4444'
+
                 with st.expander(f"Source: {item['title']}"):
                     st.caption(f"URL: {item['url']}")
+                    
+                    # BIAS-O-METER UI Injection
+                    st.markdown(f"**Linguistic Bias Audit:** {bias_label}")
+                    st.markdown(f"""
+                        <div class="bias-bar-bg">
+                            <div class="bias-bar-fill" style="width: {bias_pct}%; background: {bar_color};"></div>
+                        </div>
+                    """, unsafe_allow_html=True)
+                    
                     st.write(item['content'])
                     
         except Exception as e:
