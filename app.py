@@ -37,7 +37,7 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
+    st.write("🟢 **AI Engine:** Operational")
     st.write("🟢 **Render Engine:** WebGL Adaptive Chroma")
     st.markdown("---")
     st.caption("Vortex Legend:")
