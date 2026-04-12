@@ -34,7 +34,7 @@ with st.sidebar:
     st.markdown("### System Telemetry")
     st.markdown("---")
     st.write("🟢 **Data Fetcher:** Active")
-    st.write("🟢 **AI Engine:** Operational (Gemini 2.5 Flash)")
+    st.write("🟢 **AI Engine:** Operational")
     st.write("🟢 **Render Engine:** WebGL Pulse Vortex")
     st.markdown("---")
     st.caption("Vortex Legend:")
@@ -299,7 +299,7 @@ if st.button("Initialize Logic Audit"):
                 st.write("📡 Scanning global intelligence sources...")
                 news = fetch_news(query)
                 
-                st.write("🧠 AI Engine (Gemini 2.5 Flash) synthesizing Pulse Vortex data...")
+                st.write("🧠 AI Engine synthesizing Pulse Vortex data...")
                 payload = generate_audit_data(news)
                 
                 summary_data = payload.get("summary", {})
